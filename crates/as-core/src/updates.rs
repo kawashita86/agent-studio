@@ -233,7 +233,7 @@ pub fn select_asset<'a>(
 // ── install method ──────────────────────────────────────────────────────────
 
 /// How the desktop app was installed.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
 pub enum InstallMethod {
     /// Running from an AppImage (`$APPIMAGE` is set).
@@ -308,7 +308,7 @@ pub fn upgrade_hint(method: InstallMethod, release: Option<&UpdateInfo>) -> Stri
 
 // ── state ───────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateInfo {
     pub version: String,
@@ -320,7 +320,7 @@ pub struct UpdateInfo {
     pub asset_url: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "snake_case")]
 pub enum CheckStatus {
     /// No check has run yet.
@@ -337,7 +337,7 @@ pub enum CheckStatus {
     Failed,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateState {
     /// `checkForUpdates` of the config (a manual check works either way).

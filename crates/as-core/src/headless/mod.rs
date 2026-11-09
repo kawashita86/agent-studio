@@ -40,7 +40,7 @@ const META_SCHEMA_VERSION: u32 = 1;
 const KILL_GRACE: Duration = Duration::from_secs(3);
 const STDERR_TAIL_CHARS: usize = 400;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 struct MetaFile {
     schema_version: u32,

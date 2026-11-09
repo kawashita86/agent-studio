@@ -13,7 +13,7 @@ use crate::usage_settings::UsageSettings;
 
 // ── Agent ───────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
 pub enum AgentStatus {
     Running,
@@ -22,7 +22,7 @@ pub enum AgentStatus {
     Starting,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
 pub enum WorkMode {
     #[default]
@@ -35,7 +35,18 @@ pub enum WorkMode {
 pub type ModelId = String;
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default, Serialize, Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Hash,
+    PartialOrd,
+    Ord,
+    Default,
+    Serialize,
+    Deserialize,
+    ts_rs::TS,
 )]
 #[serde(rename_all = "lowercase")]
 pub enum ProviderId {
@@ -72,7 +83,7 @@ impl std::fmt::Display for ProviderId {
 }
 
 /// Static part of an agent (what the user asked for).
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AgentConfig {
     pub id: String,
@@ -115,7 +126,7 @@ impl Default for AgentConfig {
 
 /// `AgentConfig` plus runtime fields. Derefs to the config so
 /// `state.provider`, `state.yolo`, ... work directly.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AgentState {
     #[serde(flatten)]
@@ -157,7 +168,7 @@ impl DerefMut for AgentState {
 
 // ── Providers ───────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ProviderModelOption {
     pub id: ModelId,
@@ -242,7 +253,7 @@ pub fn is_valid_model_for_provider(provider: ProviderId, model: &str) -> bool {
 
 // ── Editors ─────────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
 pub enum EditorId {
     #[default]
@@ -310,7 +321,7 @@ pub const EDITOR_REGISTRY: &[EditorDefinition] = &[
 
 // ── Config enums ────────────────────────────────────────────────────────────
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
 pub enum ThemeId {
     Light,
@@ -319,7 +330,7 @@ pub enum ThemeId {
     Midnight,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
 pub enum ViewMode {
     Grid,
@@ -329,7 +340,8 @@ pub enum ViewMode {
 }
 
 /// `'auto' | 2 | 3` in JSON.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, ts_rs::TS)]
+#[ts(type = "'auto' | 2 | 3")]
 pub enum GridColumns {
     #[default]
     Auto,
@@ -373,7 +385,7 @@ impl<'de> Deserialize<'de> for GridColumns {
 /// * `login` — spawn through the user's login shell so rc files set PATH.
 /// * `custom` — use `terminalShellPath` + `terminalShellArgs` verbatim.
 /// * `auto` — `login` on macOS/Linux, `direct` on Windows.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
 pub enum TerminalShellMode {
     #[default]
@@ -383,7 +395,7 @@ pub enum TerminalShellMode {
     Custom,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
 pub enum TerminalCursorStyle {
     Block,
@@ -393,7 +405,7 @@ pub enum TerminalCursorStyle {
 }
 
 /// How background free terminals are managed across project switches.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
 pub enum FreeTerminalLifecyclePolicy {
     /// Keep all running until the user closes them.
@@ -406,7 +418,7 @@ pub enum FreeTerminalLifecyclePolicy {
 }
 
 /// Presentation of an auxiliary panel (Git, Files).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
 pub enum PanelDisplayMode {
     #[default]
@@ -423,7 +435,7 @@ pub const TERMINAL_FONT_SIZE_RANGE: std::ops::RangeInclusive<u32> = 8..=32;
 
 /// Application config (`config.json`). Hydra `AppConfig` plus `checkForUpdates`.
 /// Keys of old config files that no longer exist (`prefixKey`, `mouse`, `diffLayout`) are ignored on load.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
 pub struct AppConfig {
     pub schema_version: u32,
@@ -536,7 +548,7 @@ impl Default for AppConfig {
 }
 
 /// Create-agent request (Hydra `CreateAgentPayload`).
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
 pub struct CreateAgentPayload {
     pub name: String,

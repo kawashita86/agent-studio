@@ -169,6 +169,7 @@ The daemon is the same binary as the app (`agent-studio daemon --home <dir>`, hi
     (last 5 logs, 1 MiB each; keys named token/secret/password/credential/apikey/authorization are redacted).
   * *worktree mode*: `CreateAgent { work_mode: worktree }` creates `<repo>/.worktrees/<branch>` on branch `studio/<name>-<id>`
     before the spawn; the agent's `project_dir` is the worktree. Removing the agent deletes the worktree and branch only when clean.
+* **TypeScript types**: the wire types derive `ts_rs::TS`; `gui/src/bridge/generated/` is generated from them and checked by `crates/as-proto/tests/ts_bindings.rs` (see the AGENTLOG, "Cleanup").
 * **Updates (P10, `as_core::updates`)**: `GetUpdateState` (no network) / `CheckForUpdates` (asks now, also with `checkForUpdates: false`)
   answer `Response::UpdateState`; `Event::UpdateAvailable(UpdateState)` is pushed once per newly found version. The daemon checks 10 s
   after start and every 6 h when `checkForUpdates` is on: one `GET https://api.github.com/repos/kawashita86/agent-studio/releases/latest`

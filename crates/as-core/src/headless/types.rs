@@ -7,7 +7,7 @@ use crate::types::{ModelId, ProviderId};
 pub const DEFAULT_LOG_TAIL_LINES: usize = 400;
 pub const DEFAULT_LOG_MAX_CHARS: usize = 120_000;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
 pub enum HeadlessRunStatus {
     #[default]
@@ -35,7 +35,7 @@ impl HeadlessRunStatus {
 }
 
 /// Status filter of a list request (`all` = no filter).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "lowercase")]
 pub enum StatusFilter {
     #[default]
@@ -70,7 +70,7 @@ impl StatusFilter {
 }
 
 /// One run. Loading is tolerant: only `id` is required.
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
 pub struct HeadlessRun {
     pub id: String,
@@ -89,7 +89,7 @@ pub struct HeadlessRun {
     pub error: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
 pub struct StartHeadlessRunPayload {
     pub prompt: String,
@@ -100,7 +100,7 @@ pub struct StartHeadlessRunPayload {
     pub resume_session_id: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ListHeadlessRunsOptions {
     pub query: Option<String>,
@@ -108,14 +108,14 @@ pub struct ListHeadlessRunsOptions {
     pub limit: Option<usize>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase", default)]
 pub struct HeadlessRunLogOptions {
     pub tail_lines: Option<usize>,
     pub max_chars: Option<usize>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 #[serde(rename_all = "camelCase")]
 pub struct HeadlessRunLog {
     pub run_id: String,

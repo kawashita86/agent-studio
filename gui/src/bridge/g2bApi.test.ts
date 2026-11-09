@@ -158,11 +158,11 @@ describe('updates', () => {
 
   it('download/install/brew are answered with an unsupported hint instead of doing anything', async () => {
     const { raw, api } = await makeBridge((r) => r.handlers.set('get_update_state', () => ({ type: 'update_state', payload: AVAILABLE })))
-    expect((await api.downloadUpdate()).error).toMatch(/does not update itself.*brew upgrade agent-studio/)
+    expect((await api.downloadUpdate()).error).toMatch(/does not update itself.*install it/)
     expect(await api.installUpdateAndRestart()).toBe(false)
     const brew = await api.runBrewUpgrade()
     expect(brew.ok).toBe(false)
-    expect(brew.error).toMatch(/brew upgrade agent-studio/)
+    expect(brew.error).toMatch(/install it/)
     expect(raw.requests.every((r) => r.type === 'get_update_state')).toBe(true)
   })
 

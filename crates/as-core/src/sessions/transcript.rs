@@ -12,7 +12,7 @@ use crate::types::ProviderId;
 /// A transcript is never read past this many bytes.
 const MAX_TRANSCRIPT_BYTES: usize = 64 * 1024 * 1024;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
 pub struct TranscriptMessage {
     /// `user` or `assistant`.
     pub role: String,

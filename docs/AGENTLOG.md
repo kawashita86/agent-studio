@@ -476,3 +476,18 @@ included, so a test reading "the next frame" can get an event instead of its res
 - **One target dir**: `tauri build` from `crates/as-gui` writes to the workspace `target/` (`target/release/agent-studio`, bundles in `target/release/bundle/<kind>/`), not to `crates/as-gui/target`.
 - **Release asset names are an interface**: the update check picks `agent-studio-<tag>-<os>-<arch>.{AppImage,dmg,msi}`; Tauri's own file names contain spaces (`Agent Studio_...`), so the release workflow renames them.
 - **Hydra's `keybindings.json` is no longer imported** (the TUI prefix catalog was its only target); Hydra's `mod+x` shortcuts are not converted into `gui-keybindings.json` yet.
+
+## Cleanup (step C of the GUI-only plan)
+
+- **Generated TypeScript protocol types** (`gui/src/bridge/generated/`, `ts-rs` 12): the wire types derive `ts_rs::TS` (as-core payloads and as-proto messages); `crates/as-proto/tests/ts_bindings.rs` regenerates into a temp
+  folder and fails on any difference. After changing a wire type run `UPDATE_TS_BINDINGS=1 cargo test -p as-proto --test ts_bindings` and commit the files. Things to know: 64-bit ints are exported as `number`
+  (`Config::with_large_int`, they are timestamps and sizes, far below 2^53); `#[serde(with = "...")]` needs `#[ts(type = "string")]` (the base64 `Vec<u8>` fields); a hand-written `Serialize` (`GridColumns`) needs a
+  `#[ts(type = "...")]`; `Option<T>` is `T | null` (we serialize `null`, never a missing key, except `skip_serializing_if` fields); `#[serde(default)]` fields are not optional in the generated *request* types, so
+  `protocol.ts` keeps the loose envelopes for building requests.
+- **Two exported types with the same name overwrite each other's file** in a nondeterministic order (the drift test failed one run in two): rename one with `#[ts(rename = "...")]` (`overview::TokenCounts` is
+  `OverviewTokenCounts`). Check `ls gui/src/bridge/generated` for a missing name after adding a wire type.
+- **`pub` dead code is invisible to clippy**: `tokensave_dead_code` with `include_public` misses calls through trait objects and `pub use`; confirm every candidate with a word search over `crates/` before deleting. Client
+  methods of `DaemonClient` that only `crates/as-daemon/tests/` call are kept: they are the integration tests' driver.
+- **Removed config keys still load**: `AppConfig` has `#[serde(default)]` and no `deny_unknown_fields`, so `prefixKey`, `mouse` and `diffLayout` in an old `config.json` are ignored (and dropped at the next write).
+- **Install method = how the bundle was installed**: `as_core::updates::detect_install_method` is path based (`$APPIMAGE`, `/usr/{bin,lib}`, `*.app/Contents/MacOS`, `Program Files` / `AppData/Local/Programs`); an AppImage's
+  mounted path (`/tmp/.mount_*/usr/bin`) looks like a deb, so the env var is checked first. Anything else, and every `target/{debug,release}` build, is `manual`.
