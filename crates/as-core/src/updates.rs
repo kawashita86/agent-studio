@@ -281,7 +281,13 @@ pub fn detect_install_method(exe: Option<&Path>, appimage: bool) -> InstallMetho
 /// [`detect_install_method`] for the running process.
 pub fn detect_current_install_method() -> InstallMethod {
     let exe = std::env::current_exe().ok();
-    let appimage = std::env::var_os("APPIMAGE").is_some_and(|v| !v.is_empty());
+    // `$APPIMAGE`/`$APPDIR` are inherited by every child of an AppImage (e.g. a terminal started from one), so they only
+    // count when this executable really lives inside the mounted image (`$APPDIR`).
+    let appimage = std::env::var_os("APPIMAGE").is_some_and(|v| !v.is_empty())
+        && std::env::var_os("APPDIR")
+            .filter(|dir| !dir.is_empty())
+            .zip(exe.as_deref())
+            .is_some_and(|(dir, exe)| exe.starts_with(dir));
     detect_install_method(exe.as_deref(), appimage)
 }
 
