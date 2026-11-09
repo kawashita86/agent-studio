@@ -47,14 +47,6 @@ pub enum StatusFilter {
 }
 
 impl StatusFilter {
-    pub const CYCLE: [StatusFilter; 5] = [
-        Self::All,
-        Self::Running,
-        Self::Completed,
-        Self::Errored,
-        Self::Canceled,
-    ];
-
     pub fn matches(self, status: HeadlessRunStatus) -> bool {
         matches!(
             (self, status),

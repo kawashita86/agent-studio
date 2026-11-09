@@ -76,10 +76,6 @@ pub fn get_provider(id: ProviderId) -> &'static Provider {
     }
 }
 
-pub fn get_all_providers() -> [&'static Provider; 3] {
-    [&CLAUDE, &CODEX, &OPENCODE]
-}
-
 impl Provider {
     /// CLI arguments for an interactive session.
     pub fn build_args(&self, state: &AgentState) -> Vec<String> {

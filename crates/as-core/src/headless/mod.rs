@@ -132,14 +132,6 @@ impl HeadlessOrchestrator {
         *self.inner.claude_profile.lock() = Arc::new(resolver);
     }
 
-    /// Resolved CLI path per provider (from the daemon's preflight); the bare command otherwise.
-    pub fn set_provider_path_resolver(
-        &self,
-        resolver: impl Fn(ProviderId) -> Option<String> + Send + Sync + 'static,
-    ) {
-        *self.inner.provider_path.lock() = Arc::new(resolver);
-    }
-
     fn log_path(&self, id: &str) -> PathBuf {
         self.inner.dir.join(format!("{id}{LOG_EXT}"))
     }
@@ -602,11 +594,6 @@ impl HeadlessOrchestrator {
                 .lock()
                 .insert(run.id.clone(), Managed { run, cancel: None });
         }
-    }
-
-    /// The folder of the logs.
-    pub fn dir(&self) -> &Path {
-        &self.inner.dir
     }
 }
 

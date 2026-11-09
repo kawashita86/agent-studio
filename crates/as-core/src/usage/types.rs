@@ -37,9 +37,6 @@ pub enum UsagePeriod {
     Month,
 }
 
-pub const USAGE_PERIODS: [UsagePeriod; 3] =
-    [UsagePeriod::Today, UsagePeriod::Week, UsagePeriod::Month];
-
 /// Token counts of one or more model calls. `input` is fresh (uncached) input only.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -245,17 +242,4 @@ pub struct UsageState {
     /// Bumps whenever the store's data changed; clients refetch summaries when it changes.
     pub data_version: u64,
     pub updated_at: i64,
-}
-
-/// Percent of the first-index progress (`None` when not indexing or unknown).
-pub fn indexing_percent(indexing: &IndexingState) -> Option<u32> {
-    let p = indexing.progress?;
-    if !indexing.indexing || p.bytes_total == 0 {
-        return None;
-    }
-    Some(
-        ((p.bytes_done as f64 / p.bytes_total as f64) * 100.0)
-            .round()
-            .min(100.0) as u32,
-    )
 }
