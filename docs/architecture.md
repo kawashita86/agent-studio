@@ -174,9 +174,9 @@ The daemon is the same binary as the app (`agent-studio daemon --home <dir>`, hi
   after start and every 6 h when `checkForUpdates` is on: one `GET https://api.github.com/repos/kawashita86/agent-studio/releases/latest`
   through the `HttpClient` seam of the usage limits (empty bearer = no `Authorization` header). `404` = no release yet, network errors /
   rate limits only change `UpdateState.status` (`offline`, `rate_limited`, `failed`), drafts and prereleases are ignored, versions are
-  compared as semver. The state carries the install method guessed from `current_exe()` (cargo, Homebrew, winget, scoop, chocolatey,
-  direct, unknown) and a one-sentence upgrade `hint`; for a direct install the hint is the download URL of the installer for this OS and CPU
-  (`agent-studio-<tag>-<os>-<arch>.AppImage|dmg|msi`, named by the release workflow). The binary is never replaced. `AGENT_STUDIO_UPDATE_URL` overrides the API URL (tests,
+  compared as semver. The state carries the install method guessed from `$APPIMAGE` and `current_exe()` (`appimage`, `deb`,
+  `mac_app`, `msi`, `manual` for dev builds and hand-copied binaries) and a one-sentence upgrade `hint` with the download URL of the installer that
+  matches the install method (`agent-studio-<tag>-<os>-<arch>.AppImage|deb|dmg|msi`, named by the release workflow). The binary is never replaced. `AGENT_STUDIO_UPDATE_URL` overrides the API URL (tests,
   manual checks). The app shows a banner and a *Check for Updates* action in Settings > About.
 * **Overview history (`<root>/overview-history/v1-YYYY-MM-DD.jsonl`, mode 600, folder 700)**: one writer (the daemon).
   Lines: `{"start":<ms>}` (each daemon start; time between the last point and the next one is *unmeasured*),

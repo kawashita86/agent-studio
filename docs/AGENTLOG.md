@@ -455,7 +455,7 @@ included, so a test reading "the next frame" can get an event instead of its res
 - **`gui-keybindings.json` is not created at start** (Hydra writes its file at startup and rewrites it to append new defaults, which also rewrites a user's edits): it is created from the defaults when the
   user opens it. Hard links (the atomic create) fail on some file systems (FAT/exFAT, some network shares): `create_template` then falls back to an exclusive create.
 - **Claude user skills cannot be toggled** (`group: "user"`): Claude Code has no per-skill switch, the daemon's `toggle` refuses it and the panel snaps the checkbox back (Hydra wrote a meaningless entry into `enabledPlugins`).
-- **Update hint vs Hydra's install methods**: Hydra's `UpdateInstallMethod` is `brew | direct | unknown`; cargo/winget/scoop/chocolatey map to `unknown` (the "Download" button) and the real instruction travels in the
+- **Update hint vs Hydra's install methods**: Hydra's `UpdateInstallMethod` is `brew | direct | unknown`; the bundle install methods (`appimage`, `deb`, `mac_app`, `msi`) map to `direct` and a manual/dev build to `unknown` (both show the "Download" button); the real instruction travels in the
   extension field `upgradeHint`, which `UpdateBanner`/`UpdatePanel` show. Mock server check: `AGENT_STUDIO_UPDATE_URL=http://127.0.0.1:PORT/latest` (the daemon reads it at start).
 
 ## systemd / launcher PATH and WebKit selects (step A of the GUI-only plan)
