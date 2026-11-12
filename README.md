@@ -4,7 +4,7 @@
 
 Agent Studio is a desktop app (Rust + [Tauri 2](https://tauri.app), React front end) that runs several AI coding CLI agents side by
 side, each in its own pseudo-terminal and grouped by project. A background daemon (hosted by the same binary) owns the agents, so they
-keep working while the window is closed. It is a port of the desktop app [Hydra](https://github.com/jpdlr/hydra).
+keep working while the window is closed.
 
 ## Modern Workspace
 
