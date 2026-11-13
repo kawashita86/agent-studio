@@ -24,9 +24,9 @@
 .item.large {
   padding: 14px var(--space-4);
   margin-bottom: var(--space-2);
-  border: 1px solid var(--level);
+  border: 1px solid var(--box);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--level) 10%, transparent);
+  background: color-mix(in srgb, var(--box) 10%, transparent);
 }
 
 .main {
@@ -100,6 +100,16 @@
 
 .level-critical {
   --level: var(--color-status-error);
+}
+
+/* The first item's box is amber from the start; it only turns red when the wait is critical. */
+
+.item.large {
+  --box: var(--color-status-starting);
+}
+
+.item.large.level-critical {
+  --box: var(--color-status-error);
 }
 
 .reason {
