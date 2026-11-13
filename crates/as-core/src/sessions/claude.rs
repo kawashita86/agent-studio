@@ -74,6 +74,44 @@ pub fn read_claude_header(path: &Path) -> Option<JsonlHeader> {
     (!h.session_id.is_empty() && !h.cwd.is_empty()).then_some(h)
 }
 
+/// The last non-empty (trimmed) `customTitle` of a Claude transcript, i.e. the name set by the
+/// latest `/rename`. Claude appends `{"type":"custom-title","customTitle":"..."}` on every rename,
+/// so the last one wins wherever it sits in the file. The whole file is streamed (transcripts can
+/// be large) with a cheap substring prefilter, so only candidate lines are parsed as JSON.
+/// Malformed lines are ignored; an unreadable file or no title gives `None`.
+pub fn read_last_custom_title(path: &Path) -> Option<String> {
+    const NEEDLE: &[u8] = b"\"custom-title\"";
+    let file = std::fs::File::open(path).ok()?;
+    let mut reader = std::io::BufReader::new(file);
+    let mut line = Vec::new();
+    let mut title = None;
+    loop {
+        line.clear();
+        match reader.read_until(b'\n', &mut line) {
+            Ok(0) | Err(_) => break,
+            Ok(_) => {}
+        }
+        if !line.windows(NEEDLE.len()).any(|w| w == NEEDLE) {
+            continue;
+        }
+        let Ok(Value::Object(entry)) = serde_json::from_slice::<Value>(&line) else {
+            continue;
+        };
+        if entry.get("type").and_then(Value::as_str) != Some("custom-title") {
+            continue;
+        }
+        if let Some(t) = entry
+            .get("customTitle")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+        {
+            title = Some(t.to_string());
+        }
+    }
+    title
+}
+
 /// Number of user/assistant records in a transcript (a lower bound for transcripts bigger than
 /// [`COUNT_MAX_BYTES`]).
 pub fn count_claude_messages(path: &Path) -> u32 {
@@ -458,6 +496,55 @@ mod tests {
     use crate::sessions::testutil::{jsonl, write};
     use pretty_assertions::assert_eq;
     use serde_json::json;
+
+    #[test]
+    fn custom_title_last_wins_even_when_far_from_the_end() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("t.jsonl");
+        let mut lines = vec![
+            json!({"type":"custom-title","customTitle":"first","sessionId":"s"}),
+            json!({"type":"custom-title","customTitle":"  brand-generator  ","sessionId":"s"}),
+        ];
+        let filler = "x".repeat(10_000);
+        for _ in 0..300 {
+            lines.push(json!({"type":"assistant","message":{"role":"assistant","content":filler}}));
+        }
+        write(&path, &jsonl(&lines));
+        assert_eq!(
+            read_last_custom_title(&path).as_deref(),
+            Some("brand-generator")
+        );
+    }
+
+    #[test]
+    fn custom_title_ignores_malformed_empty_and_other_types() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("t.jsonl");
+        let body = [
+            r#"{"type":"custom-title","customTitle":"kept","sessionId":"s"}"#,
+            r#"{"type":"custom-title","customTitle":"cut off"#,
+            "not json but mentions \"custom-title\"",
+            r#"{"type":"custom-title","customTitle":"   "}"#,
+            r#"{"type":"custom-title","customTitle":42}"#,
+            r#"{"type":"agent-name","agentName":"other"}"#,
+            r#"{"type":"user","message":{"role":"user","content":"\"custom-title\" customTitle"}}"#,
+        ]
+        .join("\n");
+        write(&path, &body);
+        assert_eq!(read_last_custom_title(&path).as_deref(), Some("kept"));
+    }
+
+    #[test]
+    fn custom_title_none_without_a_title_or_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("t.jsonl");
+        write(
+            &path,
+            &jsonl(&[json!({"type":"agent-name","agentName":"x"})]),
+        );
+        assert_eq!(read_last_custom_title(&path), None);
+        assert_eq!(read_last_custom_title(&dir.path().join("missing")), None);
+    }
 
     fn ids(sessions: &[SessionSummary]) -> Vec<&str> {
         sessions.iter().map(|s| s.session_id.as_str()).collect()

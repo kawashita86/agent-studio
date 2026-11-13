@@ -442,7 +442,13 @@ impl Daemon {
                     .filter(|s| !(s.first_prompt.trim().is_empty() && s.message_count == 0))
                     .collect();
                 let model = get_default_model_for_provider(provider);
-                let imported = this.manager.import_sessions(&sessions, &model, provider);
+                // Reads the transcripts' `/rename` titles: off the async threads.
+                let manager = this.manager.clone();
+                let imported = tokio::task::spawn_blocking(move || {
+                    manager.import_sessions(&sessions, &model, provider)
+                })
+                .await
+                .unwrap_or(0);
                 if imported > 0 {
                     tracing::info!(imported, %provider, "imported sessions");
                 }

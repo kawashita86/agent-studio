@@ -101,6 +101,14 @@ impl SessionLocator for CatalogSessionLocator {
         };
         match_session(query, &sessions)
     }
+
+    fn custom_title(&self, provider: ProviderId, session_id: &str) -> Option<String> {
+        if provider != ProviderId::Claude {
+            return None;
+        }
+        let path = self.claude.find_transcript(session_id)?;
+        super::claude::read_last_custom_title(&path)
+    }
 }
 
 #[cfg(test)]
@@ -214,5 +222,18 @@ mod tests {
             locator.locate(&query(ProviderId::Opencode, None, None)),
             None
         );
+
+        // The `/rename` title of the transcript.
+        assert_eq!(locator.custom_title(ProviderId::Claude, sid), None);
+        let path = root.path().join("p").join(format!("{sid}.jsonl"));
+        let mut text = std::fs::read_to_string(&path).unwrap();
+        text.push_str("\n{\"type\":\"custom-title\",\"customTitle\":\"my-name\"}\n");
+        std::fs::write(&path, text).unwrap();
+        assert_eq!(
+            locator.custom_title(ProviderId::Claude, sid).as_deref(),
+            Some("my-name")
+        );
+        assert_eq!(locator.custom_title(ProviderId::Codex, sid), None);
+        assert_eq!(locator.custom_title(ProviderId::Claude, "nope"), None);
     }
 }

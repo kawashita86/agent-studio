@@ -260,3 +260,46 @@
     padding: 16px;
   }
 }
+
+/* Needs-you card: amber accent while something waits for the user. */
+
+.card.attention {
+  border-top: 3px solid var(--color-status-starting);
+}
+
+.attentionDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--color-status-starting);
+  vertical-align: middle;
+  animation: attentionPulse 1.6s ease-out infinite;
+}
+
+.attention .cardMeta {
+  min-width: 20px;
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--color-status-starting) 22%, transparent);
+  color: var(--color-status-starting);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+}
+
+@keyframes attentionPulse {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-status-starting) 60%, transparent);
+  }
+  70%,
+  100% {
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .attentionDot {
+    animation: none;
+  }
+}

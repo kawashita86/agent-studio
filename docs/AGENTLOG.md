@@ -543,3 +543,13 @@ Use one Chat body with an optional editor sibling. Switching between separate sp
 - **A launcher can retain a PATH from before Codex was installed.** The Windows installer exposes the working CLI under
   `%LOCALAPPDATA%/Programs/OpenAI/Codex/bin`. Include it in the startup PATH fallbacks so both preflight and spawned agents
   can find it without requiring Explorer or the user session to restart.
+
+## Do not re-send `/rename` on every spawn of a resumed Claude session (2026-11-13)
+
+- Claude persists `/rename` in the transcript (`custom-title` and `agent-name` lines, last wins), so the title survives
+  `--resume` by itself. Writing `/rename <state.name>` on every spawn overwrote names the user set inside Claude and
+  changed `agent-name`, which agents use to message each other. Imported agents were also named from the first prompt.
+- The manager now sends `/rename` only for fresh sessions (no `session_id`) or when `rename_pending` is set (the studio
+  renamed the agent while it had no process; persisted in `workspace.json`, cleared once written). On a resumed spawn it
+  adopts the transcript's last `customTitle` instead (`SessionLocator::custom_title`, `read_last_custom_title`; read on a
+  blocking thread, never under the manager lock, skipped if the name changed meanwhile). `import_sessions` uses the same title.

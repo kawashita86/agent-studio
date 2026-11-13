@@ -28,6 +28,13 @@
   padding: 0;
 }
 
+/* The wrapper shows focus on its outer border: no second ring on the field inside
+   (the global input:focus-visible outline outranks `.input { outline: none }`). */
+
+.input:focus-visible {
+  outline: none;
+}
+
 .input::placeholder {
   color: var(--color-text-muted);
 }

@@ -10,4 +10,9 @@ export type PersistedWorkspaceAgent = { id: string, name: string, projectDir: st
 /**
  * Explicit Claude profile chosen when the agent was created (`""` = default profile).
  */
-claudeConfigDir?: string | null, };
+claudeConfigDir?: string | null, 
+/**
+ * Claude: renamed in the studio while stopped; the next spawn must write `/rename` even
+ * though the session is resumed.
+ */
+renamePending?: boolean, };
