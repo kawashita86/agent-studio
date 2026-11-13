@@ -19,8 +19,10 @@
   border-bottom: none;
 }
 
-.large {
-  padding: var(--space-3);
+/* `.item.large` outranks `.item:last-child`, which would otherwise drop the bottom border of a lone item. */
+
+.item.large {
+  padding: 14px var(--space-4);
   margin-bottom: var(--space-2);
   border: 1px solid var(--level);
   border-radius: var(--radius-md);
