@@ -19,12 +19,14 @@
   border-bottom: none;
 }
 
-.large {
-  padding: var(--space-3);
+/* `.item.large` outranks `.item:last-child`, which would otherwise drop the bottom border of a lone item. */
+
+.item.large {
+  padding: 14px var(--space-4);
   margin-bottom: var(--space-2);
-  border: 1px solid var(--color-status-starting);
+  border: 1px solid var(--box);
   border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--color-status-starting) 10%, transparent);
+  background: color-mix(in srgb, var(--box) 10%, transparent);
 }
 
 .main {
@@ -68,9 +70,55 @@
   font-size: var(--font-size-lg);
 }
 
+.dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background: var(--tone);
+}
+
+.tone-permission {
+  --tone: var(--color-status-starting);
+}
+
+.tone-question {
+  --tone: var(--color-accent);
+}
+
+.tone-other {
+  --tone: var(--color-text-secondary);
+}
+
+.level-normal {
+  --level: var(--color-text-secondary);
+}
+
+.level-warn {
+  --level: var(--color-status-starting);
+}
+
+.level-critical {
+  --level: var(--color-status-error);
+}
+
+/* The first item's box is amber from the start; it only turns red when the wait is critical. */
+
+.item.large {
+  --box: var(--color-status-starting);
+}
+
+.item.large.level-critical {
+  --box: var(--color-status-error);
+}
+
 .reason {
+  padding: 1px 8px;
+  border-radius: var(--radius-full);
   font-size: var(--font-size-xs);
-  color: var(--color-status-starting);
+  font-weight: var(--font-weight-medium);
+  color: var(--tone);
+  background: color-mix(in srgb, var(--tone) 14%, transparent);
   white-space: nowrap;
 }
 
@@ -95,7 +143,7 @@
 
 .timer {
   font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
+  color: var(--level);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -103,7 +151,6 @@
 .large .timer {
   font-size: var(--font-size-md);
   font-weight: var(--font-weight-semibold);
-  color: var(--color-status-starting);
 }
 
 .jump {
@@ -140,21 +187,17 @@
   align-items: center;
   gap: var(--space-3);
   margin: 0;
-  font-size: calc(var(--font-size-xl) * 1.3);
+  font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
   line-height: 1.2;
 }
 
-/* A target ring: a dot inside a circle. */
-
 .clearIcon {
   width: 22px;
   height: 22px;
   flex-shrink: 0;
-  border-radius: var(--radius-full);
-  border: 2px solid var(--color-text-secondary);
-  background: radial-gradient(circle, var(--color-text-secondary) 0 4px, transparent 4.5px);
+  color: var(--color-status-running);
 }
 
 .clearText {
@@ -178,7 +221,7 @@
 }
 
 .lastWaitValue {
-  font-size: calc(var(--font-size-xl) * 1.3);
+  font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
   font-variant-numeric: tabular-nums;

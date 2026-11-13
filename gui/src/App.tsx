@@ -899,6 +899,8 @@ export default function App() {
           onSubmit={async (payload) => {
             if (!(await ensurePreflightReady())) return
             await createAgent(payload)
+            // createAgent selects the new agent: show it in Chat, not in the Grid.
+            setViewMode('chat')
             setShowNewAgent(false)
             setNewAgentPrefillDir(null)
           }}

@@ -44,6 +44,10 @@ pub struct PersistedWorkspaceAgent {
     /// Explicit Claude profile chosen when the agent was created (`""` = default profile).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claude_config_dir: Option<String>,
+    /// Claude: renamed in the studio while stopped; the next spawn must write `/rename` even
+    /// though the session is resumed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub rename_pending: bool,
 }
 
 #[derive(Serialize, ts_rs::TS)]
@@ -150,6 +154,7 @@ mod tests {
             worktree_path: None,
             worktree_branch: None,
             claude_config_dir: None,
+            rename_pending: false,
         }
     }
 
@@ -169,6 +174,22 @@ mod tests {
         assert_eq!(raw["schemaVersion"], json!(1));
         assert_eq!(raw["agents"][0]["projectDir"], json!("/p"));
         assert_eq!(raw["agents"][0]["sessionId"], Value::Null);
+    }
+
+    #[test]
+    fn rename_pending_round_trips_and_defaults_to_false() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("workspace.json");
+        let store = WorkspaceStore::at(&path);
+        let mut pending = agent("p");
+        pending.rename_pending = true;
+        store.set_agents(vec![pending, agent("q")]).unwrap();
+        let raw: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(raw["agents"][0]["renamePending"], json!(true));
+        assert!(raw["agents"][1].get("renamePending").is_none());
+        let agents = WorkspaceStore::at(&path).get_agents();
+        assert!(agents[0].rename_pending);
+        assert!(!agents[1].rename_pending);
     }
 
     #[test]

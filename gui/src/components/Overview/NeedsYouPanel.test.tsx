@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { OverviewSession } from '@shared/overview/types'
-import { NeedsYouPanel } from './NeedsYouPanel'
+import { NeedsYouPanel, waitLevel, WAIT_CRITICAL_MS, WAIT_WARN_MS } from './NeedsYouPanel'
 
 function waiting(id: string, statusSince: number, extra: Partial<OverviewSession> = {}): OverviewSession {
   return {
@@ -119,5 +119,38 @@ describe('NeedsYouPanel', () => {
     expect(screen.getByText('1m 05s')).toBeTruthy()
     expect(screen.getByText('agent-z')).toBeTruthy()
     expect(screen.getByText(/answered at/)).toBeTruthy()
+  })
+})
+
+describe('waitLevel', () => {
+  it('escalates at 2 and 10 minutes', () => {
+    expect(waitLevel(0)).toBe('normal')
+    expect(waitLevel(WAIT_WARN_MS - 1)).toBe('normal')
+    expect(waitLevel(WAIT_WARN_MS)).toBe('warn')
+    expect(waitLevel(WAIT_CRITICAL_MS - 1)).toBe('warn')
+    expect(waitLevel(WAIT_CRITICAL_MS)).toBe('critical')
+  })
+})
+
+describe('reason chip', () => {
+  afterEach(cleanup)
+
+  it('tags the chip and row with the reason tone and wait level', () => {
+    render(
+      <NeedsYouPanel
+        sessions={[
+          waiting('p', NOW - 11 * 60_000, { waitingReason: 'permission' }),
+          waiting('q', NOW - 3 * 60_000, { waitingReason: 'question' }),
+          waiting('o', NOW - 1000)
+        ]}
+        now={NOW}
+        showProvider={false}
+        onJumpToAgent={vi.fn()}
+      />
+    )
+    const items = screen.getAllByRole('listitem')
+    expect(items.map((i) => i.getAttribute('data-tone'))).toEqual(['permission', 'question', 'other'])
+    expect(items.map((i) => i.getAttribute('data-level'))).toEqual(['critical', 'warn', 'normal'])
+    expect(screen.getByText('Waiting for permission').getAttribute('data-tone')).toBe('permission')
   })
 })

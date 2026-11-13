@@ -13,14 +13,20 @@ interface CardProps {
   onTitleClick?: (trigger: HTMLElement) => void
   titleExpanded?: boolean
   titleLabel?: string
+  /** Highlights the card with an amber accent (stripe, pulsing dot, pill count). */
+  attention?: boolean
   children: ReactNode
 }
 
-export function Card({ title, area, meta, actions, onTitleClick, titleExpanded, titleLabel, children }: CardProps) {
+export function Card({ title, area, meta, actions, attention, onTitleClick, titleExpanded, titleLabel, children }: CardProps) {
   return (
-    <section className={`${styles.card} ${styles[area]}`} aria-label={title}>
+    <section className={`${styles.card} ${styles[area]} ${attention ? styles.attention : ''}`}
+      data-attention={attention ? 'true' : undefined}
+      aria-label={title}
+    >
       <header className={styles.cardHeader}>
         <h3 className={styles.cardTitle}>
+          {attention && <span className={styles.attentionDot} aria-hidden="true" />}
           {onTitleClick ? (
             <button
               type="button"

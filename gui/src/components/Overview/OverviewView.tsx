@@ -267,6 +267,7 @@ export function OverviewView({ onOpenNewAgent, onJumpToAgent, overview, usage, o
         <Card
           title="Needs you"
           area="needs"
+          attention={counts.needsYou > 0}
           meta={counts.needsYou > 0 ? counts.needsYou : undefined}
           onTitleClick={(el) => toggleChart('needsYou', el)}
           titleExpanded={chartKey === 'needsYou'}

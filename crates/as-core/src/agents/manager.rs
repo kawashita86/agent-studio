@@ -190,6 +190,12 @@ pub struct SessionQuery {
 pub trait SessionLocator: Send + Sync + 'static {
     fn locate(&self, query: &SessionQuery) -> Option<String>;
 
+    /// The name the user gave a Claude session with `/rename` (last `customTitle` of its
+    /// transcript), if any. Reads files: never call it under the manager lock.
+    fn custom_title(&self, _provider: ProviderId, _session_id: &str) -> Option<String> {
+        None
+    }
+
     /// `false` when the locator never finds anything (no point in polling).
     fn enabled(&self) -> bool {
         true
@@ -298,6 +304,9 @@ struct Managed {
     state: AgentState,
     /// Imported from a provider catalog rather than created here (P4); never persisted.
     imported: bool,
+    /// Claude only: renamed in the studio while it had no process, so the next spawn must write
+    /// `/rename` even though the session is resumed (otherwise the transcript's title wins).
+    rename_pending: bool,
     run: Option<Run>,
     output: OutputBuffer,
     stop_requested: bool,
@@ -316,6 +325,7 @@ impl Managed {
         Self {
             state,
             imported: false,
+            rename_pending: false,
             run: None,
             output: OutputBuffer::default(),
             stop_requested: false,
@@ -684,9 +694,20 @@ impl Shared {
 
         self.start_io_threads(&id, run_id, process.reader, process.waiter);
 
-        // `--name` does not name Claude sessions: write /rename after startup.
-        let rename = (m.state.provider == ProviderId::Claude && !m.state.name.trim().is_empty())
-            .then(|| m.state.name.trim().to_string());
+        // `--name` does not name Claude sessions: write /rename after startup. A resumed session
+        // already carries its title in the transcript (and may have been renamed inside Claude),
+        // so it is only re-sent when the studio renamed the agent while it was stopped.
+        let is_claude = m.state.provider == ProviderId::Claude;
+        let resumed = m.state.session_id.is_some();
+        let rename =
+            (is_claude && !m.state.name.trim().is_empty() && (!resumed || m.rename_pending))
+                .then(|| m.state.name.trim().to_string());
+        if is_claude && !m.state.name.trim().is_empty() && rename.is_none() {
+            // Resumed without a pending rename: adopt the title the transcript holds.
+            if let Some(sid) = m.state.session_id.clone() {
+                self.spawn_title_sync(&id, sid, m.state.name.clone());
+            }
+        }
         let mut steps = Vec::new();
         if let Some(name) = &rename {
             steps.push((CLAUDE_RENAME_DELAY, StartupStep::Rename(name.clone())));
@@ -739,6 +760,18 @@ impl Shared {
                 match step {
                     StartupStep::Rename(name) => {
                         write_pty(&writer, format!("/rename {name}\r").as_bytes());
+                        let cleared = {
+                            let mut inner = shared.inner.lock();
+                            inner.idx(&id).is_some_and(|idx| {
+                                let m = &mut inner.agents[idx];
+                                let ours = m.run.as_ref().is_some_and(|r| r.run_id == run_id);
+                                ours && std::mem::take(&mut m.rename_pending)
+                            })
+                        };
+                        if cleared {
+                            // Persist the cleared flag.
+                            shared.emit(AgentEvent::Changed);
+                        }
                     }
                     StartupStep::Prompt(text) => {
                         let mut inner = shared.inner.lock();
@@ -748,6 +781,39 @@ impl Shared {
                     }
                 }
             }
+        });
+    }
+
+    /// Resumed Claude session: take over the title the user may have set with `/rename` inside
+    /// Claude (the last `customTitle` of its transcript). The file is read on a blocking thread,
+    /// never under the lock. Skipped when the name changed meanwhile (a studio rename wins).
+    fn spawn_title_sync(self: &Arc<Self>, id: &str, session_id: String, name_at_spawn: String) {
+        let (shared, id) = (self.clone(), id.to_string());
+        self.handle.spawn(async move {
+            let locator = shared.locator.clone();
+            let title = tokio::task::spawn_blocking(move || {
+                locator.custom_title(ProviderId::Claude, &session_id)
+            })
+            .await
+            .ok()
+            .flatten();
+            let title = title.map(|t| t.trim().to_string());
+            let Some(title) = title.filter(|t| !t.is_empty() && *t != name_at_spawn) else {
+                return;
+            };
+            let state = {
+                let mut inner = shared.inner.lock();
+                let Some(idx) = inner.idx(&id) else { return };
+                let m = &mut inner.agents[idx];
+                if m.state.name != name_at_spawn || m.rename_pending {
+                    return;
+                }
+                m.state.name = title;
+                shared.emit_status(m);
+                m.state.clone()
+            };
+            tracing::info!(agent = %state.id, name = %state.name, "adopted the Claude session title");
+            shared.emit(AgentEvent::Changed);
         });
     }
 
@@ -1300,6 +1366,10 @@ impl AgentManager {
             return Some(m.state.clone());
         }
         m.state.name = trimmed.to_string();
+        if m.state.provider == ProviderId::Claude && m.run.is_none() {
+            // No process to write to: the next spawn writes it (see `spawn_locked`).
+            m.rename_pending = true;
+        }
         if m.state.provider == ProviderId::Claude
             && let Some(run) = &m.run
         {
@@ -1527,7 +1597,9 @@ impl AgentManager {
                 ended_at: p.ended_at.clone(),
                 last_activity_at: p.last_activity_at.clone().unwrap_or(created_at),
             };
-            inner.agents.push(Managed::new(state, None));
+            let mut managed = Managed::new(state, None);
+            managed.rename_pending = p.rename_pending;
+            inner.agents.push(managed);
             restored += 1;
         }
         drop(inner);
@@ -1548,9 +1620,19 @@ impl AgentManager {
         default_model: &str,
         provider: ProviderId,
     ) -> usize {
+        // The `/rename` title of each Claude session, read before taking the lock (file IO). Callers
+        // on an async runtime run this on a blocking thread.
+        let titles: Vec<Option<String>> = sessions
+            .iter()
+            .map(|s| {
+                (provider == ProviderId::Claude && !s.session_id.is_empty())
+                    .then(|| self.shared.locator.custom_title(provider, &s.session_id))
+                    .flatten()
+            })
+            .collect();
         let mut inner = self.shared.inner.lock();
         let mut imported = 0;
-        for session in sessions {
+        for (session, title) in sessions.iter().zip(titles) {
             if session.session_id.is_empty() || session.project_path.is_empty() {
                 continue;
             }
@@ -1574,7 +1656,9 @@ impl AgentManager {
             let state = AgentState {
                 config: AgentConfig {
                     id: inner.unique_id(&format!("sess-{short}")),
-                    name: Self::generate_name(&session.first_prompt, &session.project_path),
+                    name: title.unwrap_or_else(|| {
+                        Self::generate_name(&session.first_prompt, &session.project_path)
+                    }),
                     project_dir: session.project_path.clone(),
                     provider,
                     model: default_model.to_string(),
@@ -1639,6 +1723,7 @@ impl AgentManager {
                 worktree_path: m.state.worktree_path.clone(),
                 worktree_branch: m.state.worktree_branch.clone(),
                 claude_config_dir: m.state.claude_config_dir.clone(),
+                rename_pending: m.rename_pending,
             })
             .collect()
     }
@@ -1808,6 +1893,7 @@ mod tests {
             worktree_path: None,
             worktree_branch: None,
             claude_config_dir: None,
+            rename_pending: false,
         }
     }
 
@@ -3273,6 +3359,151 @@ mod tests {
             pty.written().ends_with("/rename New name\r")
         })
         .await;
+    }
+
+    // ── /rename on resume ───────────────────────────────────────────────────
+
+    /// Answers `custom_title` from a fixed table (stands in for a transcript on disk).
+    struct TitleLocator(Vec<(&'static str, &'static str)>);
+    impl SessionLocator for TitleLocator {
+        fn locate(&self, _q: &SessionQuery) -> Option<String> {
+            None
+        }
+        fn custom_title(&self, _p: ProviderId, session_id: &str) -> Option<String> {
+            self.0
+                .iter()
+                .find(|(id, _)| *id == session_id)
+                .map(|(_, t)| (*t).to_string())
+        }
+    }
+
+    fn titled(backend: &FakePtyBackend, titles: Vec<(&'static str, &'static str)>) -> AgentManager {
+        AgentManager::with_options(ManagerOptions {
+            backend: Arc::new(backend.clone()),
+            locator: Arc::new(TitleLocator(titles)),
+            kill_grace: Duration::from_millis(80),
+            startup: fast_startup(),
+            ..Default::default()
+        })
+    }
+
+    #[tokio::test]
+    async fn fresh_claude_session_still_gets_rename() {
+        let backend = FakePtyBackend::new();
+        let manager = manager_with(&backend);
+        manager.create(payload()).await.unwrap();
+        let pty = backend.ptys()[0].clone();
+        wait_for("/rename", || pty.written() == "/rename EP\r").await;
+    }
+
+    #[tokio::test]
+    async fn resumed_claude_session_gets_no_rename() {
+        let backend = FakePtyBackend::new();
+        let manager = manager_with(&backend);
+        manager.hydrate_workspace_agents(&[persisted("a", "sess-1", None)]);
+        assert!(manager.send_input("a", "hi"));
+        let pty = backend.ptys()[0].clone();
+        tokio::time::sleep(Duration::from_millis(1800)).await;
+        assert!(!pty.written().contains("/rename"), "{:?}", pty.written());
+        assert!(!manager.export_workspace_agents(false)[0].rename_pending);
+    }
+
+    #[tokio::test]
+    async fn rename_while_stopped_is_written_on_the_next_resume_and_cleared() {
+        let backend = FakePtyBackend::new();
+        let manager = manager_with(&backend);
+        manager.hydrate_workspace_agents(&[persisted("a", "sess-1", None)]);
+        manager.rename_agent("a", "New");
+        assert!(backend.ptys().is_empty(), "no process, nothing written");
+        assert!(manager.export_workspace_agents(false)[0].rename_pending);
+        assert!(manager.send_input("a", "hi"));
+        let pty = backend.ptys()[0].clone();
+        wait_for("/rename New", || pty.written().contains("/rename New\r")).await;
+        wait_for("flag cleared", || {
+            !manager.export_workspace_agents(false)[0].rename_pending
+        })
+        .await;
+        // The next resume leaves the name alone.
+        assert!(manager.kill("a"));
+        pty.emit_exit(0);
+        wait_for("idle", || {
+            manager.get("a").unwrap().status == AgentStatus::Idle
+        })
+        .await;
+        assert!(manager.send_input("a", "again"));
+        let pty2 = backend.ptys()[1].clone();
+        tokio::time::sleep(Duration::from_millis(1800)).await;
+        assert!(!pty2.written().contains("/rename"), "{:?}", pty2.written());
+    }
+
+    #[tokio::test]
+    async fn rename_pending_survives_a_workspace_round_trip() {
+        let backend = FakePtyBackend::new();
+        let manager = manager_with(&backend);
+        let mut p = persisted("a", "sess-1", None);
+        p.rename_pending = true;
+        manager.hydrate_workspace_agents(&[p]);
+        let exported = manager.export_workspace_agents(false);
+        assert!(exported[0].rename_pending);
+        assert!(manager.send_input("a", "hi"));
+        let pty = backend.ptys()[0].clone();
+        wait_for("/rename name-a", || {
+            pty.written().contains("/rename name-a\r")
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn resumed_session_adopts_the_transcript_title() {
+        let backend = FakePtyBackend::new();
+        let manager = titled(&backend, vec![("sess-1", "  brand-generator ")]);
+        manager.hydrate_workspace_agents(&[persisted("a", "sess-1", None)]);
+        let mut rx = manager.subscribe();
+        assert!(manager.send_input("a", "hi"));
+        wait_for("title adopted", || {
+            manager.get("a").unwrap().name == "brand-generator"
+        })
+        .await;
+        assert!(
+            drain(&mut rx)
+                .iter()
+                .any(|e| matches!(e, AgentEvent::Changed))
+        );
+        assert_eq!(
+            manager.export_workspace_agents(false)[0].name,
+            "brand-generator"
+        );
+        tokio::time::sleep(Duration::from_millis(1800)).await;
+        assert!(!backend.ptys()[0].written().contains("/rename"));
+    }
+
+    #[tokio::test]
+    async fn a_pending_rename_beats_the_transcript_title() {
+        let backend = FakePtyBackend::new();
+        let manager = titled(&backend, vec![("sess-1", "old-title")]);
+        manager.hydrate_workspace_agents(&[persisted("a", "sess-1", None)]);
+        manager.rename_agent("a", "Mine");
+        assert!(manager.send_input("a", "hi"));
+        let pty = backend.ptys()[0].clone();
+        wait_for("/rename Mine", || pty.written().contains("/rename Mine\r")).await;
+        assert_eq!(manager.get("a").unwrap().name, "Mine");
+    }
+
+    #[tokio::test]
+    async fn import_uses_the_transcript_custom_title() {
+        let backend = FakePtyBackend::new();
+        let manager = titled(&backend, vec![("sess-t", "brand-generator")]);
+        let sessions = vec![
+            catalog_session("sess-t", "/work/api", "Invalid argument: high We were"),
+            catalog_session("sess-u", "/work/api", "Fix the login bug"),
+        ];
+        assert_eq!(
+            manager.import_sessions(&sessions, "sonnet", ProviderId::Claude),
+            2
+        );
+        let agents = manager.list();
+        assert_eq!(agents[0].name, "brand-generator");
+        assert_eq!(agents[1].name, "Fix the login bug");
     }
 
     #[tokio::test]

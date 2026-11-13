@@ -30,6 +30,23 @@ export function reasonLabel(reason: WaitingReason | undefined): string {
   return 'Waiting for you'
 }
 
+export type WaitLevel = 'normal' | 'warn' | 'critical'
+export const WAIT_WARN_MS = 2 * 60_000
+export const WAIT_CRITICAL_MS = 10 * 60_000
+
+/** Escalation level of a wait: neutral below 2 min, amber from 2 min, red from 10 min. */
+export function waitLevel(ms: number): WaitLevel {
+  if (ms >= WAIT_CRITICAL_MS) return 'critical'
+  if (ms >= WAIT_WARN_MS) return 'warn'
+  return 'normal'
+}
+
+export type ReasonTone = 'permission' | 'question' | 'other'
+
+export function reasonTone(reason: WaitingReason | undefined): ReasonTone {
+  return reason === 'permission' || reason === 'question' ? reason : 'other'
+}
+
 function Item({
   session,
   now,
@@ -54,8 +71,17 @@ function Item({
     .filter(Boolean)
     .join(' · ')
 
+  const tone = reasonTone(session.waitingReason)
+  const waitedMs = now - session.statusSince
+  const level = waitLevel(waitedMs)
+
   return (
-    <li className={`${styles.item} ${large ? styles.large : ''}`}>
+    <li
+      className={`${styles.item} ${large ? styles.large : ''} ${styles[`tone-${tone}`]} ${styles[`level-${level}`]}`}
+      data-tone={tone}
+      data-level={level}
+    >
+      <span className={styles.dot} aria-hidden="true" />
       <div className={styles.main}>
         <div className={styles.head}>
           {onOpenDetails ? (
@@ -74,7 +100,7 @@ function Item({
               {session.name}
             </span>
           )}
-          <span className={styles.reason}>{reasonLabel(session.waitingReason)}</span>
+          <span className={styles.reason} data-tone={tone}>{reasonLabel(session.waitingReason)}</span>
         </div>
         <div className={styles.where} title={session.projectDir}>
           {where}
@@ -86,7 +112,7 @@ function Item({
         )}
       </div>
       <span className={styles.timer} aria-label="Waiting for">
-        {formatDuration(now - session.statusSince)}
+        {formatDuration(waitedMs)}
       </span>
       <button
         type="button"
@@ -105,7 +131,12 @@ function AllClear({ lastWait, now }: { lastWait?: LastWait; now: number }) {
     <div className={styles.clear}>
       <div className={styles.clearMain}>
         <h3 className={styles.clearTitle}>
-          <span className={styles.clearIcon} aria-hidden="true" />
+          <span className={styles.clearIcon} aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M7.5 12.5l3 3 6-6.5" />
+            </svg>
+          </span>
           Nothing needs you
         </h3>
         <p className={styles.clearText}>When an agent stops to ask for something, it will show here.</p>
