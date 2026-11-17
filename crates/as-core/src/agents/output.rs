@@ -10,6 +10,8 @@ pub const MAX_BUFFER_BYTES: usize = 2_000_000;
 pub struct OutputBuffer {
     bytes: VecDeque<u8>,
     cap: usize,
+    /// Bytes ever pushed: grows with every push, never resets (unlike `len` once the ring is full).
+    total: u64,
 }
 
 impl Default for OutputBuffer {
@@ -24,10 +26,12 @@ impl OutputBuffer {
         Self {
             bytes: VecDeque::new(),
             cap: cap.max(1),
+            total: 0,
         }
     }
 
     pub fn push(&mut self, data: &[u8]) {
+        self.total = self.total.wrapping_add(data.len() as u64);
         if data.len() >= self.cap {
             self.bytes.clear();
             self.bytes.extend(&data[data.len() - self.cap..]);
@@ -59,6 +63,17 @@ impl OutputBuffer {
         v.extend_from_slice(a);
         v.extend_from_slice(b);
         v
+    }
+
+    /// Bytes ever pushed. Changes whenever the content does, so it keys caches of derived data.
+    pub fn total_pushed(&self) -> u64 {
+        self.total
+    }
+
+    /// The last `max_bytes` bytes, contiguous.
+    pub fn tail_vec(&self, max_bytes: usize) -> Vec<u8> {
+        let start = self.bytes.len().saturating_sub(max_bytes);
+        self.bytes.range(start..).copied().collect()
     }
 
     /// The last `max_bytes` bytes as text. The cut never splits a UTF-8 character

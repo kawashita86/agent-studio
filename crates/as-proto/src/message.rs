@@ -178,6 +178,14 @@ pub enum Request {
     GetAgentDetails {
         agent_id: String,
     },
+    /// Answer the permission dialog `prompt_id` (from `OverviewSession.permission_prompt`) of a
+    /// Claude agent: "Yes" when `allow`, Esc otherwise. The daemon re-reads the agent's screen and
+    /// writes nothing unless that dialog is still showing; answers `Ok` or an error.
+    AnswerPermission {
+        agent_id: String,
+        prompt_id: String,
+        allow: bool,
+    },
     /// The usage service state: Claude plan limits per profile, Codex passive limits, indexing
     /// progress, `data_version` (P7; Hydra `USAGE_STATE_GET`); answers `UsageState`.
     GetUsageState,
@@ -803,6 +811,11 @@ mod tests {
             Request::GetOverviewEvents {
                 since_ms: Some(1),
                 limit: Some(10),
+            },
+            Request::AnswerPermission {
+                agent_id: "a".into(),
+                prompt_id: "p".into(),
+                allow: true,
             },
             Request::GetAgentDetails {
                 agent_id: "a".into(),

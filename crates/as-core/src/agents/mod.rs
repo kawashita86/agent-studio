@@ -13,7 +13,7 @@ pub mod startup;
 
 pub use manager::{
     AgentActivity, AgentEvent, AgentManager, DiscoverySchedule, ManagerError, ManagerOptions,
-    SessionLocator, SessionQuery,
+    PermissionAnswerError, SessionLocator, SessionQuery,
 };
 pub use model_catalog::ProviderModelCatalog;
 pub use startup::StartupOptions;

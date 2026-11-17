@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { OverviewSession } from '@shared/overview/types'
-import { NeedsYouPanel, waitLevel, WAIT_CRITICAL_MS, WAIT_WARN_MS } from './NeedsYouPanel'
+import { SNOOZE_KEY, SNOOZE_MS } from './snooze'
+import { KeyboardHint, NeedsYouPanel, waitLevel, WAIT_CRITICAL_MS, WAIT_WARN_MS } from './NeedsYouPanel'
 
 function waiting(id: string, statusSince: number, extra: Partial<OverviewSession> = {}): OverviewSession {
   return {
@@ -99,13 +100,12 @@ describe('NeedsYouPanel', () => {
     expect(onJump).toHaveBeenCalledWith('b')
   })
 
-  it('shows the empty state, and the last wait when provided', () => {
-    const { rerender } = render(
+  it('shows a one-line all-clear, with the last wait when provided', () => {
+    const { rerender, container } = render(
       <NeedsYouPanel sessions={[]} now={NOW} showProvider={false} onJumpToAgent={vi.fn()} />
     )
-    expect(screen.getByRole('heading', { name: 'Nothing needs you' })).toBeTruthy()
-    expect(screen.getByText(/it will show here/)).toBeTruthy()
-    expect(screen.queryByText('Last wait')).toBeNull()
+    expect(screen.getByText('Nothing needs you')).toBeTruthy()
+    expect(screen.queryByText(/last wait/)).toBeNull()
     rerender(
       <NeedsYouPanel
         sessions={[]}
@@ -115,10 +115,8 @@ describe('NeedsYouPanel', () => {
         lastWait={{ name: 'agent-z', waitedMs: 65_000, endedAt: NOW - 120_000 }}
       />
     )
-    expect(screen.getByText('Last wait')).toBeTruthy()
-    expect(screen.getByText('1m 05s')).toBeTruthy()
-    expect(screen.getByText('agent-z')).toBeTruthy()
-    expect(screen.getByText(/answered at/)).toBeTruthy()
+    expect(container.querySelectorAll('p')).toHaveLength(1)
+    expect(container.textContent).toMatch(/Nothing needs you\s*· last wait 1m 05s, agent-z, answered at /)
   })
 })
 
@@ -152,5 +150,237 @@ describe('reason chip', () => {
     expect(items.map((i) => i.getAttribute('data-tone'))).toEqual(['permission', 'question', 'other'])
     expect(items.map((i) => i.getAttribute('data-level'))).toEqual(['critical', 'warn', 'normal'])
     expect(screen.getByText('Waiting for permission').getAttribute('data-tone')).toBe('permission')
+  })
+})
+
+describe('keyboard triage', () => {
+  beforeEach(() => localStorage.clear())
+  afterEach(cleanup)
+
+  const sessions = () => [
+    waiting('a', NOW - 90_000, { waitingText: 'Run: cargo test\nin /work' }),
+    waiting('b', NOW - 60_000, { waitingText: 'Second question' }),
+    waiting('c', NOW - 30_000)
+  ]
+  const item = (id: string) => document.querySelector<HTMLLIElement>(`li[data-agent-item="${id}"]`) as HTMLLIElement
+  const setup = (extra: Partial<Parameters<typeof NeedsYouPanel>[0]> = {}, list = sessions()) => {
+    const onJump = vi.fn()
+    const onDetails = vi.fn()
+    const utils = render(
+      <NeedsYouPanel
+        sessions={list}
+        now={NOW}
+        showProvider={false}
+        onJumpToAgent={onJump}
+        onOpenDetails={onDetails}
+        {...extra}
+      />
+    )
+    return { onJump, onDetails, ...utils }
+  }
+
+  it('makes only the selected item a tab stop', () => {
+    setup()
+    expect(['a', 'b', 'c'].map((id) => item(id).tabIndex)).toEqual([0, -1, -1])
+  })
+
+  it('moves with J/K and the arrow keys, clamped at the ends', () => {
+    setup()
+    item('a').focus()
+    fireEvent.keyDown(item('a'), { key: 'j' })
+    expect(document.activeElement).toBe(item('b'))
+    expect(['a', 'b', 'c'].map((id) => item(id).tabIndex)).toEqual([-1, 0, -1])
+    fireEvent.keyDown(item('b'), { key: 'ArrowDown' })
+    expect(document.activeElement).toBe(item('c'))
+    fireEvent.keyDown(item('c'), { key: 'J' })
+    expect(document.activeElement).toBe(item('c'))
+    fireEvent.keyDown(item('c'), { key: 'k' })
+    expect(document.activeElement).toBe(item('b'))
+    fireEvent.keyDown(item('b'), { key: 'ArrowUp' })
+    fireEvent.keyDown(item('a'), { key: 'K' })
+    expect(document.activeElement).toBe(item('a'))
+  })
+
+  it('jumps with Enter and opens the details with D, using the item as trigger', () => {
+    const { onJump, onDetails } = setup()
+    item('b').focus()
+    fireEvent.keyDown(item('b'), { key: 'Enter' })
+    expect(onJump).toHaveBeenCalledWith('b')
+    fireEvent.keyDown(item('b'), { key: 'd' })
+    expect(onDetails).toHaveBeenCalledWith('b', item('b'))
+  })
+
+  it('leaves Enter to a focused button and ignores modified keys', () => {
+    const { onJump, onDetails } = setup()
+    const jump = screen.getByRole('button', { name: 'Jump to agent-b' })
+    fireEvent.keyDown(jump, { key: 'Enter' })
+    expect(onJump).not.toHaveBeenCalled()
+    fireEvent.keyDown(item('a'), { key: 'd', ctrlKey: true })
+    fireEvent.keyDown(item('a'), { key: 's', metaKey: true })
+    fireEvent.keyDown(item('a'), { key: 'j', altKey: true })
+    expect(onDetails).not.toHaveBeenCalled()
+    expect(screen.queryByText(/snoozed/)).toBeNull()
+  })
+
+  it('does not react to keys pressed outside the list', () => {
+    const { onJump } = setup()
+    fireEvent.keyDown(document.body, { key: 'Enter' })
+    fireEvent.keyDown(document.body, { key: 's' })
+    expect(onJump).not.toHaveBeenCalled()
+    expect(screen.queryByText(/snoozed/)).toBeNull()
+  })
+
+  it('shows the full waiting text only on the selected item', () => {
+    setup()
+    expect(item('a').getAttribute('data-selected')).toBe('true')
+    expect(item('a').className).toMatch(/selected/)
+    expect(item('b').className).not.toMatch(/selected/)
+    fireEvent.focus(item('b'))
+    expect(item('b').className).toMatch(/selected/)
+    expect(item('a').className).not.toMatch(/selected/)
+  })
+
+  it('snoozes with S, moves focus on, and lists the item as snoozed', () => {
+    setup()
+    item('a').focus()
+    fireEvent.keyDown(item('a'), { key: 's' })
+    expect(screen.getAllByRole('listitem').map((li) => li.getAttribute('data-agent-item'))).toEqual(['b', 'c'])
+    expect(document.activeElement).toBe(item('b'))
+    expect(item('b').tabIndex).toBe(0)
+    expect(JSON.parse(localStorage.getItem(SNOOZE_KEY) ?? '{}')).toEqual({ [`a@${NOW - 90_000}`]: NOW + SNOOZE_MS })
+
+    const toggle = screen.getByRole('button', { name: '1 snoozed · Show' })
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(screen.queryByRole('button', { name: 'Unsnooze agent-a' })).toBeNull()
+    fireEvent.click(toggle)
+    expect(toggle.textContent).toBe('1 snoozed · Hide')
+    fireEvent.click(screen.getByRole('button', { name: 'Unsnooze agent-a' }))
+    expect(screen.getAllByRole('listitem').map((li) => li.getAttribute('data-agent-item'))).toEqual(['a', 'b', 'c'])
+    expect(screen.queryByText(/snoozed/)).toBeNull()
+    expect(localStorage.getItem(SNOOZE_KEY)).toBeNull()
+  })
+
+  it('shows the all-clear plus the snoozed line when everything is snoozed', () => {
+    setup({}, [waiting('a', NOW - 1000)])
+    item('a').focus()
+    fireEvent.keyDown(item('a'), { key: 's' })
+    expect(screen.getByText('Nothing needs you')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '1 snoozed · Show' })).toBeTruthy()
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: '1 snoozed · Show' }))
+  })
+
+  it('does not hide a new wait of the same agent, and prunes expired snoozes', () => {
+    localStorage.setItem(SNOOZE_KEY, JSON.stringify({ [`a@${NOW - 1000}`]: NOW + 5000, [`gone@1`]: NOW - 1 }))
+    const { rerender } = setup({}, [waiting('a', NOW - 1000)])
+    expect(screen.queryByRole('listitem')).toBeNull()
+    expect(screen.getByRole('button', { name: '1 snoozed · Show' })).toBeTruthy()
+    expect(JSON.parse(localStorage.getItem(SNOOZE_KEY) ?? '{}')).toEqual({ [`a@${NOW - 1000}`]: NOW + 5000 })
+
+    // A new wait of agent a starts later: a different statusSince.
+    rerender(
+      <NeedsYouPanel sessions={[waiting('a', NOW - 10)]} now={NOW} showProvider={false} onJumpToAgent={vi.fn()} />
+    )
+    expect(screen.getAllByRole('listitem')).toHaveLength(1)
+    expect(screen.queryByText(/snoozed/)).toBeNull()
+
+    // The old snooze runs out.
+    rerender(
+      <NeedsYouPanel sessions={[waiting('a', NOW - 1000)]} now={NOW + 6000} showProvider={false} onJumpToAgent={vi.fn()} />
+    )
+    expect(screen.getAllByRole('listitem')).toHaveLength(1)
+    expect(localStorage.getItem(SNOOZE_KEY)).toBeNull()
+  })
+
+  it('renders the key hint', () => {
+    render(<KeyboardHint />)
+    expect(document.body.textContent).toContain('move')
+    expect(document.querySelectorAll('kbd')).toHaveLength(5)
+  })
+})
+
+describe('NeedsYouPanel permission answers', () => {
+  const prompt = {
+    id: 'p1',
+    question: 'Do you want to proceed?',
+    summary: 'Bash command\nmkdir demo-dir'
+  }
+  let answerPermission: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    answerPermission = vi.fn().mockResolvedValue(undefined)
+    window.hydra = { ...window.hydra, answerPermission } as typeof window.hydra
+  })
+  afterEach(cleanup)
+
+  function renderWith(session: OverviewSession) {
+    return render(<NeedsYouPanel sessions={[session]} now={NOW} showProvider={false} onJumpToAgent={vi.fn()} />)
+  }
+
+  it('shows Allow, Deny and the command only when the session has a prompt', () => {
+    const { unmount } = renderWith(waiting('a', 1, { waitingReason: 'permission' }))
+    expect(screen.queryByRole('button', { name: /^Allow/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Deny/ })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Jump to agent-a' })).toBeTruthy()
+    unmount()
+
+    renderWith(waiting('a', 1, { waitingReason: 'permission', permissionPrompt: prompt }))
+    expect(screen.getByRole('button', { name: 'Allow agent-a' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Deny agent-a' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Jump to agent-a' })).toBeTruthy()
+    expect(screen.getByText(/mkdir demo-dir/).tagName).toBe('PRE')
+  })
+
+  it('answers with the prompt id', async () => {
+    renderWith(waiting('a', 1, { permissionPrompt: prompt }))
+    fireEvent.click(screen.getByRole('button', { name: 'Allow agent-a' }))
+    expect(answerPermission).toHaveBeenCalledWith('a', 'p1', true)
+    await screen.findByText('Answer sent')
+    cleanup()
+    answerPermission.mockClear()
+    renderWith(waiting('a', 1, { permissionPrompt: prompt }))
+    fireEvent.click(screen.getByRole('button', { name: 'Deny agent-a' }))
+    expect(answerPermission).toHaveBeenCalledWith('a', 'p1', false)
+  })
+
+  it('disables both buttons while the call is pending and after it was sent', async () => {
+    let resolve: () => void = () => undefined
+    answerPermission.mockReturnValue(new Promise<void>((r) => (resolve = r)))
+    renderWith(waiting('a', 1, { permissionPrompt: prompt }))
+    fireEvent.click(screen.getByRole('button', { name: 'Allow agent-a' }))
+    expect((screen.getByRole('button', { name: 'Allow agent-a' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Deny agent-a' }) as HTMLButtonElement).disabled).toBe(true)
+    // Jump stays available.
+    expect((screen.getByRole('button', { name: 'Jump to agent-a' }) as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Deny agent-a' }))
+    expect(answerPermission).toHaveBeenCalledTimes(1)
+    resolve()
+    await screen.findByText('Answer sent')
+    expect((screen.getByRole('button', { name: 'Allow agent-a' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('shows the daemon error inline and re-enables the buttons', async () => {
+    answerPermission.mockRejectedValue(new Error('The prompt changed; open the agent to answer it'))
+    renderWith(waiting('a', 1, { permissionPrompt: prompt }))
+    fireEvent.click(screen.getByRole('button', { name: 'Allow agent-a' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe('The prompt changed; open the agent to answer it')
+    expect((screen.getByRole('button', { name: 'Allow agent-a' }) as HTMLButtonElement).disabled).toBe(false)
+    expect((screen.getByRole('button', { name: 'Jump to agent-a' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('starts fresh when the dialog changes', async () => {
+    const { rerender } = renderWith(waiting('a', 1, { permissionPrompt: prompt }))
+    fireEvent.click(screen.getByRole('button', { name: 'Allow agent-a' }))
+    await screen.findByText('Answer sent')
+    rerender(
+      <NeedsYouPanel
+        sessions={[waiting('a', 1, { permissionPrompt: { ...prompt, id: 'p2' } })]}
+        now={NOW}
+        showProvider={false}
+        onJumpToAgent={vi.fn()}
+      />
+    )
+    expect(screen.queryByText('Answer sent')).toBeNull()
+    expect((screen.getByRole('button', { name: 'Allow agent-a' }) as HTMLButtonElement).disabled).toBe(false)
   })
 })

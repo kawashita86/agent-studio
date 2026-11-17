@@ -88,6 +88,34 @@ describe('SessionDetails', () => {
     expect(screen.getByText('main')).toBeTruthy()
   })
 
+  it('shows a Changes fact with the diff, untracked files and the PR, and none without changes', async () => {
+    const pr = { number: 5, state: 'draft' as const, url: 'https://github.com/o/r/pull/5' }
+    const { rerender } = render(
+      <SessionDetails
+        agentId="a1"
+        session={session({ changes: { added: 12, removed: 3, files: 2, untracked: 1, ahead: 1, pr } })}
+        now={NOW}
+        onClose={vi.fn()}
+        onJumpToAgent={vi.fn()}
+      />
+    )
+    expect(await screen.findByText('Changes')).toBeTruthy()
+    expect(screen.getByText('+12')).toBeTruthy()
+    expect(screen.getByText(/2 files/)).toBeTruthy()
+    expect(screen.getByText('1 not tracked by git yet')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Open PR #5 draft in the browser' })).toBeTruthy()
+    rerender(
+      <SessionDetails
+        agentId="a1"
+        session={session({ changes: { added: 0, removed: 0, files: 0, untracked: 0 } })}
+        now={NOW}
+        onClose={vi.fn()}
+        onJumpToAgent={vi.fn()}
+      />
+    )
+    expect(screen.queryByText('Changes')).toBeNull()
+  })
+
   it('shows when an ended session ended, and its exit code', async () => {
     const at = NOW - 2 * 3_600_000
     const { rerender } = render(

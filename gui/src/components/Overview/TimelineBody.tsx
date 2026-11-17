@@ -1,12 +1,12 @@
 import { useId, useMemo } from 'react'
 import { HOUR_MS, timelineSegments, type AgentFilter, type Segment } from '@shared/overview/buckets'
 import type { HistoryAgent, HistoryPoint, OverviewStatus } from '@shared/overview/types'
-import { Card, EmptyState } from './Card'
+import { EmptyState } from './Card'
 import { HatchPattern, formatHourMinute, safeId } from './chartParts'
 import { STATUS_LABEL } from './sessionFacts'
 import styles from './Charts.module.css'
 import detailStyles from './SessionDetails.module.css'
-import own from './TimelineCard.module.css'
+import own from './TimelineBody.module.css'
 
 const COARSE_MS = 5000
 const ROW_HEIGHT = 14
@@ -64,7 +64,7 @@ export function TimelineRow({
   )
 }
 
-interface TimelineCardProps {
+interface TimelineBodyProps {
   points: HistoryPoint[]
   starts: number[]
   now: number
@@ -96,52 +96,49 @@ export function useTimelineRows(
   }, [points, starts, coarse, agents, agentFilter])
 }
 
-export function TimelineCard({ points, starts, now, agents, agentFilter }: TimelineCardProps) {
+/** The per-agent status strips of the last hour (the Timeline tab of the Activity card). */
+export function TimelineBody({ points, starts, now, agents, agentFilter }: TimelineBodyProps) {
   const { rows, windowEnd } = useTimelineRows(points, starts, now, agents, agentFilter)
   const from = windowEnd - HOUR_MS
   const ticks: number[] = []
   for (let t = Math.ceil(from / (15 * 60_000)) * 15 * 60_000; t <= windowEnd; t += 15 * 60_000) ticks.push(t)
 
-  return (
-    <Card title="Timeline" area="timeline" meta="last hour">
-      {rows.length === 0 ? (
-        <EmptyState>No history yet</EmptyState>
-      ) : (
-        <div>
-          <ul className={own.rows} aria-label="Agents">
-            {rows.map((r) => (
-              <li key={r.agentId} className={own.row} data-agent={r.agentId}>
-                <span className={own.name} title={r.name}>
-                  {r.name}
-                </span>
-                <TimelineRow segments={r.segments} now={windowEnd} label={r.name} />
-              </li>
-            ))}
-          </ul>
-          <div className={own.axisWrap}>
-            <div className={styles.axis} aria-hidden="true">
-              {ticks.map((t) => (
-                <span key={t} className={styles.axisLabel} style={{ left: `${((t - from) / HOUR_MS) * 100}%` }}>
-                  {formatHourMinute(t)}
-                </span>
-              ))}
-            </div>
-          </div>
-          <ul className={styles.legend} aria-label="Legend">
-            {LEGEND.map((s) => (
-              <li key={s} className={styles.legendItem}>
-                <span className={`${styles.swatch} ${styles[`s_${s.replace('-', '_')}`]}`} />
-                {STATUS_LABEL[s]}
-              </li>
-            ))}
-            <li className={styles.legendItem}>
-              <span className={`${styles.swatch} ${styles.swatchHatched}`} />
-              Not measured
-            </li>
-          </ul>
+  return rows.length === 0 ? (
+    <EmptyState>No history yet</EmptyState>
+  ) : (
+    <div>
+      <ul className={own.rows} aria-label="Agents">
+        {rows.map((r) => (
+          <li key={r.agentId} className={own.row} data-agent={r.agentId}>
+            <span className={own.name} title={r.name}>
+              {r.name}
+            </span>
+            <TimelineRow segments={r.segments} now={windowEnd} label={r.name} />
+          </li>
+        ))}
+      </ul>
+      <div className={own.axisWrap}>
+        <div className={styles.axis} aria-hidden="true">
+          {ticks.map((t) => (
+            <span key={t} className={styles.axisLabel} style={{ left: `${((t - from) / HOUR_MS) * 100}%` }}>
+              {formatHourMinute(t)}
+            </span>
+          ))}
         </div>
-      )}
-    </Card>
+      </div>
+      <ul className={styles.legend} aria-label="Legend">
+        {LEGEND.map((s) => (
+          <li key={s} className={styles.legendItem}>
+            <span className={`${styles.swatch} ${styles[`s_${s.replace('-', '_')}`]}`} />
+            {STATUS_LABEL[s]}
+          </li>
+        ))}
+        <li className={styles.legendItem}>
+          <span className={`${styles.swatch} ${styles.swatchHatched}`} />
+          Not measured
+        </li>
+      </ul>
+    </div>
   )
 }
 

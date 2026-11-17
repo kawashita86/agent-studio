@@ -331,6 +331,18 @@ describe('config, sessions, overview, usage', () => {
     expect(await api.getMcpServerStatus()).toEqual({ running: true, port: 7, error: null, managerWorkspace: '/m' })
   })
 
+  it('answerPermission sends the prompt id and surfaces the daemon error', async () => {
+    const { raw, api } = await setup((r) => {
+      r.handlers.set('answer_permission', (p) => {
+        if ((p as { prompt_id: string }).prompt_id === 'stale') throw new Error('The prompt changed; open the agent to answer it')
+        return { type: 'ok' }
+      })
+    })
+    await api.answerPermission('a', 'p1', true)
+    expect(raw.of('answer_permission')[0].payload).toEqual({ agent_id: 'a', prompt_id: 'p1', allow: true })
+    await expect(api.answerPermission('a', 'stale', false)).rejects.toThrow('The prompt changed')
+  })
+
   it('overview and usage requests', async () => {
     const ledger = { transitions: [], spans: [{ start: 1, end: 2 }], starts: [1] }
     const { raw, api } = await setup((r) => {

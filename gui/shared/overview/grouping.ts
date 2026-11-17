@@ -46,12 +46,27 @@ function sortByStatus(sessions: readonly OverviewSession[]): OverviewSession[] {
 }
 
 /**
- * Groups for the List layout: Working, Idle (non-stale then stale), Finished /
+ * Idle (stale or not) or finished agents with something to review: changed or untracked files,
+ * commits not pushed, or an open or draft pull request. Working, failed, needs-you and
+ * not-running sessions are never ready for review.
+ */
+export function isReadyForReview(s: OverviewSession): boolean {
+  if (s.status !== 'idle' && s.status !== 'finished') return false
+  const c = s.changes
+  if (!c) return false
+  return c.files > 0 || c.untracked > 0 || (c.ahead ?? 0) > 0 || c.pr?.state === 'open' || c.pr?.state === 'draft'
+}
+
+/**
+ * Groups for the List layout: Ready for review (idle or finished agents with changes to look at),
+ * Working, Idle (non-stale then stale), Finished /
  * Failed (failed first), Starting. Sessions that need the user are left out:
  * they are in the Needs you panel. Empty groups are dropped.
  */
 export function groupByStatus(sessions: readonly OverviewSession[]): SessionGroup[] {
-  const sorted = sortByStatus(sessions.filter((s) => s.status !== 'needs-you'))
+  const kept = sessions.filter((s) => s.status !== 'needs-you')
+  const review = sortByStatus(kept.filter(isReadyForReview))
+  const sorted = sortByStatus(kept.filter((s) => !isReadyForReview(s)))
   const defs: { key: string; label: string; ranks: number[]; limit?: number }[] = [
     { key: 'working', label: 'Working', ranks: [1] },
     { key: 'idle', label: 'Idle', ranks: [2, 3] },
@@ -59,7 +74,7 @@ export function groupByStatus(sessions: readonly OverviewSession[]): SessionGrou
     { key: 'not-running', label: 'Not running', ranks: [6], limit: ENDED_GROUP_LIMIT },
     { key: 'starting', label: 'Starting', ranks: [7] }
   ]
-  return defs
+  const groups = defs
     .map((d) => ({
       key: d.key,
       label: d.label,
@@ -67,6 +82,7 @@ export function groupByStatus(sessions: readonly OverviewSession[]): SessionGrou
       ...(d.limit !== undefined ? { limit: d.limit } : {})
     }))
     .filter((g) => g.sessions.length > 0)
+  return review.length > 0 ? [{ key: 'review', label: 'Ready for review', sessions: review }, ...groups] : groups
 }
 
 /**

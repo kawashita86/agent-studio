@@ -7,21 +7,20 @@ import { computeCounts } from '@shared/overview/status'
 import { useNow, useOverviewSnapshot, type OverviewData } from '@/hooks/useOverview'
 import { useOverviewHistory } from '@/hooks/useOverviewHistory'
 import { useOverviewWaits } from '@/hooks/useOverviewWaits'
-import { Card, EmptyState } from './Card'
+import { ActivityCard } from './ActivityCard'
+import { Card } from './Card'
 import { CountHistory } from './CountHistory'
-import { CountsRow } from './CountsRow'
 import { projectName } from './format'
-import { EventsCard } from './EventsCard'
 import { lastWaitFrom } from './historyFacts'
-import { LastHourChart } from './LastHourChart'
-import { NeedsYouPanel } from './NeedsYouPanel'
+import { LimitsBar } from './LimitsBar'
+import { KeyboardHint, NeedsYouPanel } from './NeedsYouPanel'
 import { OwnEvents } from './OwnEvents'
 import { SessionDetails } from './SessionDetails'
 import { SessionsCard } from './SessionsCard'
-import { UsageCard } from './UsageCard'
-import { WaitedOnYou } from './WaitedOnYou'
-import { WaitsCard } from './WaitsCard'
-import { OwnTimeline, TimelineCard } from './TimelineCard'
+import { StatusStrip, type StatusFilter } from './StatusStrip'
+import { SinceAwayCard } from './SinceAwayCard'
+import { OwnTimeline } from './TimelineBody'
+import { useLastSeen } from './useLastSeen'
 import styles from './OverviewView.module.css'
 
 const FILTER_STORAGE_KEY = 'agentStudio.overview.projectFilter'
@@ -36,7 +35,7 @@ interface OverviewViewProps {
   onOpenNewAgent?: () => void
   /** Snapshot state owned by the parent (shared with the tab badge); subscribes itself when absent. */
   overview?: OverviewData
-  /** Usage state owned by `App`; `null` while loading. Leave undefined to hide the usage card. */
+  /** Usage state owned by `App`; `null` while loading. Leave undefined to hide the limits bar. */
   usage?: UsageState | null
   /** Opens the detailed usage report. */
   onOpenUsageReport?: () => void
@@ -59,20 +58,19 @@ function writeStoredFilter(value: string): void {
   }
 }
 
-function plural(n: number, one: string, many: string): string {
-  return `${n} ${n === 1 ? one : many}`
-}
-
 export function OverviewView({ onOpenNewAgent, onJumpToAgent, overview, usage, onOpenUsageReport }: OverviewViewProps) {
   const own = useOverviewSnapshot(overview !== undefined)
   const { snapshot, loading, error } = overview ?? own
   const now = useNow()
   const { history } = useOverviewHistory()
   const { ledger } = useOverviewWaits()
+  const lastSeen = useLastSeen()
   const [storedFilter, setStoredFilter] = useState<string>(readStoredFilter)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [chartKey, setChartKey] = useState<CountKey | null>(null)
+  const [statusFilter, setStatusFilter] = useState<StatusFilter | null>(null)
   const rootRef = useRef<HTMLDivElement>(null)
+  const needsRef = useRef<HTMLElement>(null)
   const chartTriggerRef = useRef<HTMLElement | null>(null)
   const triggerRef = useRef<HTMLElement | null>(null)
 
@@ -169,6 +167,18 @@ export function OverviewView({ onOpenNewAgent, onJumpToAgent, overview, usage, o
     if (trigger?.isConnected) trigger.focus()
   }, [])
 
+  const toggleStatusFilter = useCallback(
+    (status: StatusFilter) => setStatusFilter((current) => (current === status ? null : status)),
+    []
+  )
+
+  const focusNeeds = useCallback(() => {
+    const card = needsRef.current
+    if (!card) return
+    card.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' })
+    card.focus({ preventScroll: true })
+  }, [])
+
   const handleFilterChange = (value: string) => {
     setStoredFilter(value)
     writeStoredFilter(value)
@@ -221,12 +231,8 @@ export function OverviewView({ onOpenNewAgent, onJumpToAgent, overview, usage, o
     <div className={styles.overview} ref={rootRef}>
       <div className={styles.topBar}>
         <h2 className={styles.title}>Overview</h2>
-        <span className={styles.summary}>
-          {plural(sessions.length, 'agent', 'agents')}
-          {counts.needsYou > 0 && ` · ${counts.needsYou} need you`}
-          {counts.working > 0 && ` · ${counts.working} working`}
-        </span>
         <div className={styles.spacer} />
+        {usage !== undefined && <LimitsBar state={usage} projectDir={filter} onOpenReport={onOpenUsageReport} />}
         <label className={styles.filter}>
           <span className={styles.filterLabel}>Project</span>
           <select
@@ -247,7 +253,14 @@ export function OverviewView({ onOpenNewAgent, onJumpToAgent, overview, usage, o
       </div>
 
       <section className={styles.summaryBlock} aria-label="Agent statistics">
-        <CountsRow counts={counts} onOpenChart={toggleChart} openChart={chartKey} />
+        <StatusStrip
+          counts={counts}
+          filter={statusFilter}
+          onToggleFilter={toggleStatusFilter}
+          onFocusNeeds={focusNeeds}
+          onOpenChart={toggleChart}
+          openChart={chartKey}
+        />
         {chartKey && (
           <CountHistory
             key={chartKey}
@@ -262,38 +275,33 @@ export function OverviewView({ onOpenNewAgent, onJumpToAgent, overview, usage, o
       </section>
 
       <div className={styles.grid}>
-        {usage !== undefined && <UsageCard state={usage} projectDir={filter} onOpenReport={onOpenUsageReport} />}
-
         <Card
           title="Needs you"
           area="needs"
           attention={counts.needsYou > 0}
           meta={counts.needsYou > 0 ? counts.needsYou : undefined}
-          onTitleClick={(el) => toggleChart('needsYou', el)}
-          titleExpanded={chartKey === 'needsYou'}
-          titleLabel="Needs you history"
+          focusRef={needsRef}
+          actions={needsYou.length > 0 ? <KeyboardHint /> : undefined}
         >
-          <div className={styles.needsBody}>
-            <NeedsYouPanel
-              sessions={needsYou}
-              now={now}
-              showProvider={multipleProviders}
-              onJumpToAgent={jump}
-              onOpenDetails={openDetails}
-              lastWait={lastWait}
-            />
-            {waited && <WaitedOnYou bars={waited.bars} from={waited.from} unmeasuredMs={waited.unmeasuredMs} />}
-
-          </div>
+          <NeedsYouPanel
+            sessions={needsYou}
+            now={now}
+            showProvider={multipleProviders}
+            onJumpToAgent={jump}
+            onOpenDetails={openDetails}
+            lastWait={lastWait}
+          />
         </Card>
 
-        <Card title="Last hour" area="lastHour">
-          {historyPoints && historyStarts ? (
-            <LastHourChart points={historyPoints} starts={historyStarts} now={now} agentFilter={agentFilter} />
-          ) : (
-            <EmptyState>No history yet</EmptyState>
-          )}
-        </Card>
+        <SinceAwayCard
+          history={history}
+          filter={filter}
+          now={now}
+          lastSeen={lastSeen.marker}
+          awayFrom={lastSeen.visitFrom}
+          onClearMarker={lastSeen.clearMarker}
+          onOpenAgent={openDetails}
+        />
 
         <SessionsCard
           sessions={sessions}
@@ -302,19 +310,21 @@ export function OverviewView({ onOpenNewAgent, onJumpToAgent, overview, usage, o
           selectedId={selectedId}
           onOpenDetails={openDetails}
           onJumpToAgent={jump}
+          statusFilter={statusFilter}
+          onClearFilter={() => setStatusFilter(null)}
         />
 
-        <EventsCard history={history} filter={filter} now={now} onOpenAgent={openDetails} />
-
-        <TimelineCard
-          points={historyPoints ?? noPoints}
-          starts={historyStarts ?? noPoints}
+        <ActivityCard
+          points={historyPoints}
+          starts={historyStarts}
           now={now}
           agents={historyAgents ?? NO_AGENTS}
           agentFilter={agentFilter}
+          ledger={ledger}
+          waitingNow={waitingNow}
+          waitsFilter={waitsFilter}
+          waited={waited}
         />
-
-        <WaitsCard ledger={ledger} waitingNow={waitingNow} now={now} agentFilter={waitsFilter} />
       </div>
 
       {selectedId && (

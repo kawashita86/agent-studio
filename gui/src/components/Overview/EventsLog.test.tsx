@@ -3,7 +3,8 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HistoryResponse, OverviewEvent } from '@shared/overview/types'
-import { EventsCard } from './EventsCard'
+import { EventsLog } from './EventsLog'
+import { useLastSeen } from './useLastSeen'
 import { LAST_SEEN_KEY } from './newSince'
 
 const NOW = new Date(2026, 9, 22, 12, 0, 0).getTime()
@@ -23,7 +24,15 @@ function historyOf(events: OverviewEvent[], since = NOW - 3_600_000): HistoryRes
   }
 }
 
-describe('EventsCard', () => {
+type LogProps = Omit<Parameters<typeof EventsLog>[0], 'lastSeen' | 'onClearMarker'>
+
+/** `OverviewView` owns the marker; the log gets it through props. */
+function EventsCard(props: LogProps) {
+  const { marker: lastSeen, clearMarker: clear } = useLastSeen()
+  return <EventsLog {...props} lastSeen={lastSeen} onClearMarker={clear} />
+}
+
+describe('EventsLog', () => {
   beforeEach(() => localStorage.clear())
   afterEach(() => {
     cleanup()
@@ -81,7 +90,6 @@ describe('EventsCard', () => {
     const events = [ev(NOW - 1000), ev(NOW - 2000)]
     const { unmount } = render(<EventsCard history={historyOf(events)} filter="" now={NOW} onOpenAgent={() => undefined} />)
     expect(screen.queryByRole('separator')).toBeNull()
-    expect(screen.queryByText(/new$/)).toBeNull()
     // Leaving stores the time; coming back with nothing newer shows nothing.
     unmount()
     expect(localStorage.getItem(LAST_SEEN_KEY)).not.toBeNull()
@@ -110,7 +118,6 @@ describe('EventsCard', () => {
     const events = [ev(NOW - 1000), ev(NOW - 2000), ev(NOW - 3000), ev(NOW - 9000)]
     render(<EventsCard history={historyOf(events)} filter="" now={NOW} onOpenAgent={() => undefined} />)
 
-    expect(screen.getByText('3 new')).toBeTruthy()
     const separator = screen.getByRole('separator')
     expect(separator.textContent).toMatch(/^New since \d/)
     expect(Array.from(separator.parentElement?.children ?? []).indexOf(separator)).toBe(3)
@@ -137,6 +144,5 @@ describe('EventsCard', () => {
       vi.advanceTimersByTime(10_000)
     })
     expect(screen.queryByRole('separator')).toBeNull()
-    expect(screen.queryByText('3 new')).toBeNull()
   })
 })

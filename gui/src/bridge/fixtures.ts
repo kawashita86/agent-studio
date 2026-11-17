@@ -6,7 +6,14 @@ import {
   type AppConfig,
   type FreeTerminalLayout
 } from '@shared/types'
-import type { OverviewCounts, OverviewSession, OverviewSnapshot, OverviewStatus } from '@shared/overview/types'
+import type {
+  AgentChanges,
+  OverviewCounts,
+  OverviewSession,
+  OverviewSnapshot,
+  OverviewStatus,
+  PermissionPromptInfo
+} from '@shared/overview/types'
 import type { UsageState } from '@shared/usage/types'
 import type { AppInfo } from './transport'
 
@@ -77,6 +84,13 @@ export function fixtureAgents(): AgentState[] {
       yolo: true
     }),
     agent({
+      id: 'b7c8d9e0',
+      name: 'update-deps',
+      projectDir: '/home/you/projects/website',
+      status: 'running',
+      pid: 4245
+    }),
+    agent({
       id: '0a1b2c3d',
       name: 'migrate-db',
       projectDir: '/home/you/projects/website',
@@ -89,6 +103,15 @@ export function fixtureAgents(): AgentState[] {
   ]
 }
 
+/** Claude agents waiting for a permission, with the dialog the daemon found on their screen (Allow / Deny). */
+const MOCK_PERMISSION_PROMPTS: Record<string, PermissionPromptInfo> = {
+  b7c8d9e0: {
+    id: 'mock-prompt-1',
+    question: 'Do you want to proceed?',
+    summary: 'Bash command\nUpdate the Composer dependencies\ncomposer update --no-interaction'
+  }
+}
+
 const OVERVIEW_STATUS: Record<AgentState['status'], OverviewStatus> = {
   running: 'working',
   idle: 'idle',
@@ -96,11 +119,25 @@ const OVERVIEW_STATUS: Record<AgentState['status'], OverviewStatus> = {
   starting: 'starting'
 }
 
+/** Git change facts for two mock agents: one with a pull request, one with unpushed work. */
+const MOCK_CHANGES: Record<string, AgentChanges> = {
+  e5f6a7b8: {
+    added: 142,
+    removed: 37,
+    files: 6,
+    untracked: 1,
+    ahead: 2,
+    behind: 0,
+    pr: { number: 31, state: 'open', url: 'https://github.com/you/website/pull/31' }
+  },
+  a1b2c3d4: { added: 18, removed: 4, files: 2, untracked: 0, ahead: 1 }
+}
+
 export function overviewSnapshot(agents: AgentState[]): OverviewSnapshot {
   const at = Date.now()
   const sessions: OverviewSession[] = agents.map((a, i) => {
     // Show one "needs you" session so the Overview is not all green.
-    const status: OverviewStatus = a.id === 'c9d0e1f2' ? 'needs-you' : OVERVIEW_STATUS[a.status]
+    const status: OverviewStatus = a.id === 'c9d0e1f2' || a.id === 'b7c8d9e0' ? 'needs-you' : OVERVIEW_STATUS[a.status]
     return {
       agentId: a.id,
       name: a.name,
@@ -114,12 +151,19 @@ export function overviewSnapshot(agents: AgentState[]): OverviewSnapshot {
       statusSince: at - 120_000 * (i + 1),
       ...(status === 'failed' ? { endedAt: at - 300_000, exitCode: 1 } : {}),
       ...(status === 'needs-you'
-        ? { waitingReason: 'permission' as const, waitingText: 'Run `cargo test --workspace`?' }
+        ? {
+            waitingReason: 'permission' as const,
+            waitingText: a.id === 'b7c8d9e0' ? 'Run: composer update' : 'Run `cargo test --workspace`?'
+          }
+        : {}),
+      ...(status === 'needs-you' && a.provider === 'claude' && MOCK_PERMISSION_PROMPTS[a.id]
+        ? { permissionPrompt: MOCK_PERMISSION_PROMPTS[a.id] }
         : {}),
       stale: false,
       pid: a.pid,
       startedAt: a.startedAt ? Date.parse(a.startedAt) : 0,
-      lastOutputAt: Date.parse(a.lastActivityAt)
+      lastOutputAt: Date.parse(a.lastActivityAt),
+      ...(MOCK_CHANGES[a.id] ? { changes: MOCK_CHANGES[a.id] } : {})
     }
   })
   const count = (s: OverviewStatus): number => sessions.filter((x) => x.status === s).length

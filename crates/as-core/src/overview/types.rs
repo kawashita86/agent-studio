@@ -81,6 +81,65 @@ pub struct OverviewSession {
     /// Epoch ms, `0` when the agent never started.
     pub started_at: i64,
     pub last_output_at: i64,
+    /// Git change facts of the agent's working folder; absent for non-repositories and until the
+    /// first background read finished.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changes: Option<AgentChanges>,
+    /// The permission dialog a Claude agent shows on its screen, when one was found (only for
+    /// agents that need the user for a permission). Absent otherwise: use Jump.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permission_prompt: Option<PermissionPromptInfo>,
+}
+
+/// A permission dialog the Overview can answer (Allow / Deny).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct PermissionPromptInfo {
+    /// Identifies this dialog; sent back with the answer so a changed dialog is not answered.
+    pub id: String,
+    /// "Do you want to proceed?"
+    pub question: String,
+    /// The tool and command lines of the dialog, joined with newlines.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
+}
+
+/// State of the pull request of an agent's branch.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "lowercase")]
+pub enum PrState {
+    Open,
+    Draft,
+    Merged,
+    Closed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct PrSummary {
+    pub number: u32,
+    pub state: PrState,
+    pub url: String,
+}
+
+/// What an agent changed in its working folder.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, ts_rs::TS)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentChanges {
+    /// Added lines against HEAD (untracked text files count as pure additions).
+    pub added: u32,
+    pub removed: u32,
+    /// Changed files, untracked ones included.
+    pub files: u32,
+    /// Of `files`, the ones git does not track yet.
+    pub untracked: u32,
+    /// Commits not pushed to the upstream; absent without an upstream.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ahead: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub behind: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pr: Option<PrSummary>,
 }
 
 impl OverviewSession {
@@ -107,6 +166,8 @@ impl OverviewSession {
             pid: None,
             started_at: 0,
             last_output_at: 0,
+            changes: None,
+            permission_prompt: None,
         }
     }
 }

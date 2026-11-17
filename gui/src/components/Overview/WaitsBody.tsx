@@ -3,11 +3,11 @@ import { useId, useMemo, useState } from 'react'
 import type { AgentFilter } from '@shared/overview/buckets'
 import type { LongestWait, WaitFigure, WaitLedgerData, WaitingNow } from '@shared/overview/types'
 import { waitTotals } from '@shared/overview/waits'
-import { Card, EmptyState } from './Card'
+import { EmptyState } from './Card'
 import { HatchPattern, safeId } from './chartParts'
 import { formatDuration } from './format'
 import styles from './Charts.module.css'
-import own from './WaitsCard.module.css'
+import own from './WaitsBody.module.css'
 import switchStyles from './Sessions.module.css'
 
 const HEIGHT = 72
@@ -17,7 +17,7 @@ const COARSE_MS = 5000
 
 type Period = 'today' | 'week'
 
-interface WaitsCardProps {
+interface WaitsBodyProps {
   /** `null` until the daemon answered. */
   ledger: WaitLedgerData | null
   waitingNow: WaitingNow[]
@@ -63,7 +63,8 @@ function Longest({ entries }: { entries: LongestWait[] }) {
   )
 }
 
-export function WaitsCard({ ledger, waitingNow, now, agentFilter }: WaitsCardProps) {
+/** Wait totals, by-day chart and longest waits (the Waits tab of the Activity card). */
+export function WaitsBody({ ledger, waitingNow, now, agentFilter }: WaitsBodyProps) {
   const hatchId = safeId(useId()) + 'w'
   const [period, setPeriod] = useState<Period>('today')
   const coarse = Math.floor(now / COARSE_MS) * COARSE_MS
@@ -83,11 +84,7 @@ export function WaitsCard({ ledger, waitingNow, now, agentFilter }: WaitsCardPro
   )
 
   if (!totals || totals.week.measuredMs <= 0) {
-    return (
-      <Card title="Waits" area="waits">
-        <EmptyState>{ledger ? 'Nothing measured yet' : 'No waits recorded yet'}</EmptyState>
-      </Card>
-    )
+    return <EmptyState>{ledger ? 'Nothing measured yet' : 'No waits recorded yet'}</EmptyState>
   }
 
   const slot = 100 / totals.byDay.length
@@ -116,69 +113,67 @@ export function WaitsCard({ ledger, waitingNow, now, agentFilter }: WaitsCardPro
   )
 
   return (
-    <Card title="Waits" area="waits">
-      <div className={own.body}>
-        <div className={own.figures}>
-          <Figure label="Today" figure={totals.today} />
-          <Figure label="7 days" figure={totals.week} />
-        </div>
-
-        <div className={own.columns}>
-          <section aria-label="By day" className={own.byDay}>
-            <h4 className={own.subheading}>By day</h4>
-            <svg className={styles.svg} height={HEIGHT} aria-hidden="true" focusable="false">
-              <defs>
-                <HatchPattern id={hatchId} />
-              </defs>
-              {totals.byDay.map((d, i) => {
-                const x = i * slot + BAR_GAP_PCT / 2
-                const w = slot - BAR_GAP_PCT
-                const closedH = px(d.ms - d.openMs)
-                const openH = px(d.openMs)
-                return (
-                  <g key={d.day} data-day={d.day}>
-                    {!d.measured && (
-                      <rect x={`${x}%`} width={`${w}%`} y={0} height={HEIGHT} fill={`url(#${hatchId})`} data-unmeasured="" />
-                    )}
-                    {closedH > 0 && (
-                      <rect className={own.barClosed} x={`${x}%`} width={`${w}%`} y={HEIGHT - closedH - openH} height={closedH} />
-                    )}
-                    {openH > 0 && (
-                      <rect className={styles.barNeeds} x={`${x}%`} width={`${w}%`} y={HEIGHT - openH} height={openH} data-open="" />
-                    )}
-                  </g>
-                )
-              })}
-              <line className={styles.baseline} x1="0" x2="100%" y1={HEIGHT} y2={HEIGHT} />
-            </svg>
-            <ol className={own.days}>
-              {totals.byDay.map((d) => (
-                <li
-                  key={d.day}
-                  className={own.day}
-                  title={`${d.day}: waited ${formatDuration(d.ms)}, measured ${formatDuration(d.measuredMs, { compact: true })}`}
-                >
-                  <span className={own.dayValue}>{d.measured ? formatDuration(d.ms, { compact: true }) : '—'}</span>
-                  <span className={own.dayName}>{weekday(d.day)}</span>
-                </li>
-              ))}
-            </ol>
-          </section>
-
-          <section aria-label="Longest waits" className={own.longestWrap}>
-            <div className={own.longestHead}>
-              <h4 className={own.subheading}>Longest waits</h4>
-              {control}
-            </div>
-            <Longest entries={totals.longest[period]} />
-          </section>
-        </div>
-
-        <p className={own.measured}>
-          Measured {formatDuration(totals.today.measuredMs, { compact: true })} of today,{' '}
-          {formatDuration(totals.week.measuredMs, { compact: true })} of the 7 days
-        </p>
+    <div className={own.body}>
+      <div className={own.figures}>
+        <Figure label="Today" figure={totals.today} />
+        <Figure label="7 days" figure={totals.week} />
       </div>
-    </Card>
+
+      <div className={own.columns}>
+        <section aria-label="By day" className={own.byDay}>
+          <h4 className={own.subheading}>By day</h4>
+          <svg className={styles.svg} height={HEIGHT} aria-hidden="true" focusable="false">
+            <defs>
+              <HatchPattern id={hatchId} />
+            </defs>
+            {totals.byDay.map((d, i) => {
+              const x = i * slot + BAR_GAP_PCT / 2
+              const w = slot - BAR_GAP_PCT
+              const closedH = px(d.ms - d.openMs)
+              const openH = px(d.openMs)
+              return (
+                <g key={d.day} data-day={d.day}>
+                  {!d.measured && (
+                    <rect x={`${x}%`} width={`${w}%`} y={0} height={HEIGHT} fill={`url(#${hatchId})`} data-unmeasured="" />
+                  )}
+                  {closedH > 0 && (
+                    <rect className={own.barClosed} x={`${x}%`} width={`${w}%`} y={HEIGHT - closedH - openH} height={closedH} />
+                  )}
+                  {openH > 0 && (
+                    <rect className={styles.barNeeds} x={`${x}%`} width={`${w}%`} y={HEIGHT - openH} height={openH} data-open="" />
+                  )}
+                </g>
+              )
+            })}
+            <line className={styles.baseline} x1="0" x2="100%" y1={HEIGHT} y2={HEIGHT} />
+          </svg>
+          <ol className={own.days}>
+            {totals.byDay.map((d) => (
+              <li
+                key={d.day}
+                className={own.day}
+                title={`${d.day}: waited ${formatDuration(d.ms)}, measured ${formatDuration(d.measuredMs, { compact: true })}`}
+              >
+                <span className={own.dayValue}>{d.measured ? formatDuration(d.ms, { compact: true }) : '—'}</span>
+                <span className={own.dayName}>{weekday(d.day)}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <section aria-label="Longest waits" className={own.longestWrap}>
+          <div className={own.longestHead}>
+            <h4 className={own.subheading}>Longest waits</h4>
+            {control}
+          </div>
+          <Longest entries={totals.longest[period]} />
+        </section>
+      </div>
+
+      <p className={own.measured}>
+        Measured {formatDuration(totals.today.measuredMs, { compact: true })} of today,{' '}
+        {formatDuration(totals.week.measuredMs, { compact: true })} of the 7 days
+      </p>
+    </div>
   )
 }

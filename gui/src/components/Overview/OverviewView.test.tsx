@@ -35,6 +35,11 @@ const mockSnapshot = (sessions: OverviewSession[]) => {
   }
 }
 
+function chipCount(label: string): string | null | undefined {
+  const strip = screen.getByRole('group', { name: 'Agent status' })
+  return within(strip).getByText(label, { selector: 'span' }).previousElementSibling?.textContent
+}
+
 describe('OverviewView', () => {
   afterEach(cleanup)
 
@@ -56,14 +61,59 @@ describe('OverviewView', () => {
       'alpha',
       'beta'
     ])
-    expect(screen.getByText('3 agents · 1 need you · 2 working')).toBeTruthy()
+    expect(chipCount('Working')).toBe('2')
 
     fireEvent.change(select, { target: { value: '/work/beta' } })
 
     expect(screen.queryByText('agent-1')).toBeNull()
     expect(screen.getAllByText('agent-2').length).toBeGreaterThan(0)
-    expect(screen.getByText('2 agents · 1 need you · 1 working')).toBeTruthy()
+    expect(chipCount('Working')).toBe('1')
     expect(window.localStorage.getItem('agentStudio.overview.projectFilter')).toBe('/work/beta')
+  })
+
+  it('orders the cards: Needs you, Since you were away, Sessions, Activity', async () => {
+    mockSnapshot([session('1', '/work/alpha'), session('2', '/work/alpha', 'needs-you')])
+    render(<OverviewView />)
+    await screen.findByLabelText('Project filter')
+    const order = screen.getAllByRole('region').map((r) => r.getAttribute('aria-label'))
+    const away = order.findIndex((l) => l === 'Last hour of events' || l?.startsWith('Since you were away'))
+    expect(order.indexOf('Needs you')).toBeLessThan(away)
+    expect(away).toBeLessThan(order.indexOf('Sessions'))
+    expect(order.indexOf('Sessions')).toBeLessThan(order.indexOf('Activity'))
+    expect(order).not.toContain('Timeline')
+    expect(order).not.toContain('Waits')
+    expect(order).not.toContain('Events')
+    expect(screen.queryByText(/need you · /)).toBeNull()
+  })
+
+  it('filters the Sessions card from a status chip and clears it again', async () => {
+    mockSnapshot([session('1', '/work/alpha'), session('2', '/work/alpha', 'finished')])
+    render(<OverviewView />)
+    const finished = await screen.findByRole('button', { name: /^\d+\s*Finished/, pressed: false })
+    expect(screen.getByText('agent-1')).toBeTruthy()
+    fireEvent.click(finished)
+    expect(finished.getAttribute('aria-pressed')).toBe('true')
+    expect(screen.queryByText('agent-1')).toBeNull()
+    expect(screen.getByText('agent-2')).toBeTruthy()
+    expect(screen.getByText(/Filtered: Finished/)).toBeTruthy()
+    fireEvent.click(finished)
+    expect(screen.getByText('agent-1')).toBeTruthy()
+    fireEvent.click(finished)
+    fireEvent.click(screen.getByRole('button', { name: 'Clear filter: Finished' }))
+    expect(screen.getByText('agent-1')).toBeTruthy()
+  })
+
+  it('opens and closes the history chart from the chart button', async () => {
+    mockSnapshot([session('1', '/work/alpha')])
+    render(<OverviewView />)
+    const trigger = await screen.findByRole('button', { name: 'Working history' })
+    expect(trigger.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(trigger)
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getByRole('region', { name: 'Working history' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Close chart' }))
+    expect(screen.queryByRole('region', { name: 'Working history' })).toBeNull()
+    expect(document.activeElement).toBe(trigger)
   })
 
   it('restores the stored filter and falls back to All when the project is gone', async () => {

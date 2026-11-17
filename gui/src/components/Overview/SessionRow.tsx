@@ -1,7 +1,18 @@
-import type { OverviewSession } from '@shared/overview/types'
+import type { AgentChanges, OverviewSession, PrSummary } from '@shared/overview/types'
 import { isEnded } from '@shared/overview/status'
 import { formatAgo, formatClock, formatDuration } from './format'
-import { agentLabel, branchOf, dotKey, folderOf, quietText, statusLabel } from './sessionFacts'
+import {
+  agentLabel,
+  aheadTitle,
+  branchOf,
+  diffText,
+  dotKey,
+  folderOf,
+  isWebUrl,
+  prLabel,
+  quietText,
+  statusLabel
+} from './sessionFacts'
 import styles from './Sessions.module.css'
 
 export interface SessionItemProps {
@@ -34,6 +45,54 @@ export function Where({ session, hideFolder }: { session: OverviewSession; hideF
   )
 }
 
+/** `+142 −37 · 6 files` and `↑2` when commits are not pushed; nothing when nothing changed. */
+export function DiffStat({ changes }: { changes: AgentChanges | undefined }) {
+  const files = diffText(changes)
+  const ahead = aheadTitle(changes)
+  if (!changes || (!files && !ahead)) return null
+  return (
+    <span className={styles.changes} data-testid="changes">
+      {files && (
+        <>
+          <span className={styles.added}>+{changes.added}</span>
+          <span className={styles.removed}>
+            {'\u2212'}
+            {changes.removed}
+          </span>
+          <span className={styles.changesFiles}>
+            {'\u00b7'} {files}
+          </span>
+        </>
+      )}
+      {ahead && (
+        <span className={styles.ahead} title={ahead}>
+          {'\u2191'}
+          {changes.ahead}
+        </span>
+      )}
+    </span>
+  )
+}
+
+/** The pull request of the agent's branch; opens its page in the browser. */
+export function PrPill({ pr }: { pr: PrSummary | undefined }) {
+  if (!pr) return null
+  const open = () => {
+    if (isWebUrl(pr.url)) window.hydra.openExternal(pr.url).catch(() => {})
+  }
+  return (
+    <button
+      type="button"
+      className={`${styles.prPill} ${styles[`pr_${pr.state}`]}`}
+      onClick={open}
+      title={`Open ${pr.url}`}
+      aria-label={`Open ${prLabel(pr)} in the browser`}
+    >
+      {prLabel(pr)}
+    </button>
+  )
+}
+
 export function StatusFact({ session, now }: { session: OverviewSession; now: number }) {
   const quiet = quietText(session, now)
   const ended = isEnded(session.status)
@@ -54,6 +113,7 @@ export function StatusFact({ session, now }: { session: OverviewSession; now: nu
           <span className={styles.duration}>{formatDuration(now - session.statusSince, { compact: true })}</span>
         )}
       </span>
+      <DiffStat changes={session.changes} />
       {quiet && (
         <span
           className={styles.quiet}
@@ -95,6 +155,10 @@ export function SessionRow({
           <StatusFact session={session} now={now} />
         </span>
       </button>
+      {/* Always present, so the columns of rows with and without a pull request line up. */}
+      <span className={styles.prSlot}>
+        <PrPill pr={session.changes?.pr} />
+      </span>
       <button
         type="button"
         className={styles.jump}

@@ -247,6 +247,21 @@ pub async fn handle(daemon: &Arc<Daemon>, client: u64, req: Request) -> Reply {
                     .map_err(|e| format!("agent details failed: {e}"))?;
             Ok(Response::AgentDetails(details.map(Box::new)))
         }
+        Request::AnswerPermission {
+            agent_id,
+            prompt_id,
+            allow,
+        } => {
+            // The screen replay can take a few ms: off the async threads.
+            let manager = m.clone();
+            tokio::task::spawn_blocking(move || {
+                manager.answer_permission(&agent_id, &prompt_id, allow)
+            })
+            .await
+            .map_err(|e| format!("answer failed: {e}"))?
+            .map(|()| Response::Ok)
+            .map_err(|e| e.to_string())
+        }
         Request::GetUsageState => Ok(Response::UsageState(Box::new(daemon.usage.state()))),
         Request::GetUsageSummary {
             period,

@@ -54,7 +54,7 @@ export const WIRED_METHODS = [
   'getOverviewAgentDetails', 'getOverviewHistory', 'getOverviewWaits', 'getUsageState', 'getUsageSummary', 'getUsageReport',
   'refreshUsage', 'setUsageVisible', 'getConfig', 'setConfig', 'getKeybindingsPath', 'getConfigPath',
   'toggleGlobalYolo', 'listClaudeProfiles', 'listClaudeSessions', 'listProviderModels', 'getMcpServerStatus',
-  'dismissNotification', 'getDaemonStatus', ...GIT_METHODS, ...FILE_METHODS, ...TERMINAL_METHODS, ...NATIVE_METHODS,
+  'dismissNotification', 'getDaemonStatus', 'answerPermission', ...GIT_METHODS, ...FILE_METHODS, ...TERMINAL_METHODS, ...NATIVE_METHODS,
   ...HEADLESS_METHODS, ...SKILL_METHODS, ...UPDATE_METHODS, ...DIAGNOSTICS_METHODS, ...KEYBINDING_METHODS, ...QUIT_METHODS, ...HYDRA_IMPORT_METHODS
 ] as const
 
@@ -267,6 +267,11 @@ export function createDaemonTransport(options: DaemonTransportOptions): DaemonTr
       serial(agentId, () => send('send_raw', { agent_id: agentId, data: bytesToBase64(utf8Bytes(data)) }))) as never,
     resizeAgent: ((agentId: string, cols: number, rows: number) =>
       serial(agentId, () => send('resize', { agent_id: agentId, cols, rows }))) as never,
+
+    // Answer a permission dialog (an Agent Studio extension): serialized with the agent's other input.
+    answerPermission: (async (agentId: string, promptId: string, allow: boolean) => {
+      await serial(agentId, () => call('answer_permission', { agent_id: agentId, prompt_id: promptId, allow }, 'ok'))
+    }) as never,
 
     // Overview
     getOverview: (() => call('get_overview', undefined, 'overview')) as never,

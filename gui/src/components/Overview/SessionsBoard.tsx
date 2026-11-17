@@ -3,7 +3,7 @@
 import { useMemo } from 'react'
 import type { OverviewSession } from '@shared/overview/types'
 import { boardColumns, type BoardColumn } from '@shared/overview/grouping'
-import { Where, StatusFact, type SessionItemProps } from './SessionRow'
+import { Where, StatusFact, PrPill, type SessionItemProps } from './SessionRow'
 import { agentLabel } from './sessionFacts'
 import styles from './Sessions.module.css'
 
@@ -38,6 +38,7 @@ function BoardCard({
         <Where session={session} />
         <span className={styles.boardAgent}>{agentLabel(session, showProvider)}</span>
       </button>
+      <PrPill pr={session.changes?.pr} />
       <button
         type="button"
         className={styles.jump}

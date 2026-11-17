@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { boardColumns, ENDED_GROUP_LIMIT, groupByRepo, groupByStatus, NO_REPOSITORY } from './grouping'
-import type { OverviewSession } from './types'
+import {
+  boardColumns,
+  ENDED_GROUP_LIMIT,
+  groupByRepo,
+  groupByStatus,
+  isReadyForReview,
+  NO_REPOSITORY
+} from './grouping'
+import type { AgentChanges, OverviewSession } from './types'
 
 function s(id: string, status: OverviewSession['status'], extra: Partial<OverviewSession> = {}): OverviewSession {
   return {
@@ -120,5 +127,53 @@ describe('boardColumns', () => {
   it('lists the newest ended sessions first', () => {
     const cols = boardColumns([s('o', 'finished', { statusSince: 1 }), s('n', 'finished', { statusSince: 9 })])
     expect(cols[3].items.map((x) => x.agentId)).toEqual(['n', 'o'])
+  })
+})
+
+const changes = (extra: Partial<AgentChanges> = {}): AgentChanges => ({
+  added: 0,
+  removed: 0,
+  files: 0,
+  untracked: 0,
+  ...extra
+})
+
+describe('Ready for review', () => {
+  it('holds idle and finished agents with something to look at, ahead of every other group', () => {
+    const groups = groupByStatus([
+      s('work', 'working'),
+      s('plain', 'idle'),
+      s('files', 'idle', { changes: changes({ files: 2 }) }),
+      s('stale', 'idle', { stale: true, changes: changes({ untracked: 1 }) }),
+      s('ahead', 'finished', { changes: changes({ ahead: 2 }) }),
+      s('draft', 'idle', { changes: changes({ pr: { number: 1, state: 'draft', url: 'u' } }) })
+    ])
+    expect(groups.map((g) => g.label)).toEqual(['Ready for review', 'Working', 'Idle'])
+    // Same order as the rest of the list: idle before stale before finished, then by name.
+    expect(groups[0].sessions.map((x) => x.agentId)).toEqual(['draft', 'files', 'stale', 'ahead'])
+    expect(groups[0].limit).toBeUndefined()
+    expect(groups[2].sessions.map((x) => x.agentId)).toEqual(['plain'])
+  })
+
+  it('never takes working, failed, needs-you, not-running or starting agents', () => {
+    const busy = changes({ files: 3, ahead: 1 })
+    for (const status of ['working', 'failed', 'needs-you', 'not-running', 'starting'] as const) {
+      expect(isReadyForReview(s('x', status, { changes: busy }))).toBe(false)
+    }
+    expect(groupByStatus([s('w', 'working', { changes: busy })]).map((g) => g.label)).toEqual(['Working'])
+  })
+
+  it('needs a reason: clean, merged or closed work, or no facts at all, is not ready', () => {
+    const pr = (state: 'open' | 'merged' | 'closed') => changes({ pr: { number: 1, state, url: 'u' } })
+    expect(isReadyForReview(s('a', 'idle'))).toBe(false)
+    expect(isReadyForReview(s('b', 'idle', { changes: changes({ ahead: 0, behind: 3 }) }))).toBe(false)
+    expect(isReadyForReview(s('c', 'finished', { changes: pr('merged') }))).toBe(false)
+    expect(isReadyForReview(s('d', 'finished', { changes: pr('closed') }))).toBe(false)
+    expect(isReadyForReview(s('e', 'finished', { changes: pr('open') }))).toBe(true)
+  })
+
+  it('does not change the Repos layout', () => {
+    const groups = groupByRepo([s('a', 'idle', { repoName: 'r', changes: changes({ files: 1 }) })], (x) => x.repoName)
+    expect(groups.map((g) => g.label)).toEqual(['r'])
   })
 })

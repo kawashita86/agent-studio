@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
 
 use super::*;
 use crate::overview::git_info::GitInfo;
+use crate::overview::permission_prompt::PermissionPrompt;
 use crate::overview::status::STALE_AFTER_MS;
 use crate::overview::types::{
     ClaudeRegistryStatusFields, EventKind, LastMessage, OverviewStatus as S, WaitingReason,
@@ -14,6 +15,7 @@ struct World {
     activity: HashMap<String, AgentActivity>,
     entries: Vec<RegistryEntry>,
     table: ProcessTable,
+    prompts: HashMap<String, PermissionPrompt>,
 }
 
 #[derive(Clone)]
@@ -24,6 +26,9 @@ impl OverviewAgentSource for FakeAgents {
     }
     fn activity(&self, id: &str) -> Option<AgentActivity> {
         self.0.lock().activity.get(id).copied()
+    }
+    fn permission_prompt(&self, id: &str) -> Option<PermissionPrompt> {
+        self.0.lock().prompts.get(id).cloned()
     }
 }
 
@@ -136,6 +141,7 @@ fn deps(world: &Arc<Mutex<World>>, clock: &Arc<AtomicI64>) -> DepsParts {
         config_dirs: Box::new(|| vec![PathBuf::from("/cfg")]),
         waiting_text: None,
         git: None,
+        changes: None,
         details: None,
         history: None,
         now: Box::new(move || c.load(Ordering::SeqCst)),
@@ -194,6 +200,47 @@ fn a_waiting_claude_registry_entry_is_needs_you_with_its_reason() {
     assert_eq!(snap.counts.needs_you, 1);
     assert_eq!(*f.registry_dirs.lock(), [vec![PathBuf::from("/cfg")]]);
     assert!(f.tracker.has_registry_match("a1"));
+}
+
+fn prompt() -> PermissionPrompt {
+    PermissionPrompt {
+        question: "Do you want to proceed?".into(),
+        summary: Some("Bash command\nmkdir x".into()),
+        options: vec![(1, "Yes".into()), (2, "No".into())],
+        allow_key: 1,
+        id: "p1".into(),
+    }
+}
+
+#[test]
+fn the_permission_prompt_is_only_on_claude_agents_waiting_for_a_permission() {
+    let mut f = fixture();
+    f.set_agents(vec![claude("a1", Some("s1")), agent("a2")]);
+    f.output("a1", f.now(), None);
+    f.output("a2", f.now(), None);
+    f.world.lock().prompts.insert("a1".into(), prompt());
+    f.world.lock().prompts.insert("a2".into(), prompt());
+    // Working: no prompt even if the screen shows one.
+    f.entries(vec![entry(7, "s1", "busy", None)]);
+    let snap = f.tracker.refresh().snapshot;
+    assert!(snap.sessions.iter().all(|s| s.permission_prompt.is_none()));
+    // Waiting for a permission: Claude only.
+    f.entries(vec![entry(7, "s1", "waiting", Some("permission prompt"))]);
+    let polled = f.tracker.refresh();
+    assert!(polled.changed);
+    let a1 = &polled.snapshot.sessions[0];
+    let info = a1.permission_prompt.as_ref().expect("prompt");
+    assert_eq!(info.id, "p1");
+    assert_eq!(info.question, "Do you want to proceed?");
+    assert_eq!(info.summary.as_deref(), Some("Bash command\nmkdir x"));
+    assert!(polled.snapshot.sessions[1].permission_prompt.is_none());
+    // Another dialog: pushed.
+    f.world.lock().prompts.get_mut("a1").unwrap().id = "p2".into();
+    assert!(f.tracker.refresh().changed);
+    // Waiting for something else: none.
+    f.entries(vec![entry(7, "s1", "waiting", Some("input"))]);
+    let snap = f.tracker.refresh().snapshot;
+    assert!(snap.sessions[0].permission_prompt.is_none());
 }
 
 fn bash_line(cmd: &str) -> String {
@@ -473,6 +520,50 @@ fn adds_repository_branch_and_commit_and_pushes_when_they_change() {
     assert_eq!(poll.snapshot.sessions[0].commit.as_deref(), Some("abc1234"));
     assert_eq!(poll.snapshot.sessions[0].branch, None);
     assert!(poll.changed);
+}
+
+#[test]
+fn adds_changes_of_the_worktree_from_the_background_cache_and_pushes_when_they_arrive() {
+    use crate::overview::changes::{ChangesCache, ChangesReader, Job, JobSpawner, PrReader};
+    use crate::overview::types::AgentChanges;
+    let queue: Arc<Mutex<Vec<Job>>> = Arc::new(Mutex::new(Vec::new()));
+    let dirs_read = Arc::new(Mutex::new(Vec::<String>::new()));
+    let (q, d) = (queue.clone(), dirs_read.clone());
+    let read: ChangesReader = Arc::new(move |dir| {
+        d.lock().push(dir.display().to_string());
+        Some(AgentChanges {
+            added: 3,
+            files: 1,
+            ..AgentChanges::default()
+        })
+    });
+    let read_pr: PrReader = Arc::new(|_| None);
+    let spawn: JobSpawner = Arc::new(move |job| q.lock().push(job));
+    let mut f = fixture_with(|d| d.changes = Some(ChangesCache::new(read, read_pr, spawn)));
+    let mut a = agent("a1");
+    a.config.worktree_path = Some("/work/wt".into());
+    f.set_agents(vec![a]);
+    let first = f.tracker.refresh();
+    assert_eq!(
+        first.snapshot.sessions[0].changes, None,
+        "never waits for git"
+    );
+    let jobs: Vec<_> = queue.lock().drain(..).collect();
+    assert_eq!(jobs.len(), 1);
+    for job in jobs {
+        job();
+    }
+    assert_eq!(*dirs_read.lock(), vec!["/work/wt".to_string()]);
+    f.advance(1);
+    let second = f.tracker.refresh();
+    assert_eq!(
+        second.snapshot.sessions[0]
+            .changes
+            .as_ref()
+            .map(|c| c.added),
+        Some(3)
+    );
+    assert!(second.changed);
 }
 
 #[test]

@@ -447,6 +447,22 @@ impl DaemonClient {
         }
     }
 
+    /// Allow or deny the permission dialog `prompt_id` of a Claude agent. Fails (and writes
+    /// nothing) when that dialog is no longer on the agent's screen.
+    pub async fn answer_permission(
+        &self,
+        agent_id: &str,
+        prompt_id: &str,
+        allow: bool,
+    ) -> Result<()> {
+        self.expect_ok(Request::AnswerPermission {
+            agent_id: agent_id.into(),
+            prompt_id: prompt_id.into(),
+            allow,
+        })
+        .await
+    }
+
     /// `None` when the daemon does not know the agent.
     pub async fn get_agent_details(&self, agent_id: &str) -> Result<Option<AgentDetails>> {
         match self

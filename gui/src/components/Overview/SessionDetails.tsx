@@ -5,7 +5,8 @@ import { isEnded } from '@shared/overview/status'
 import type { AgentDetails, OverviewSession } from '@shared/overview/types'
 import { formatAgo, formatClock, formatCount, formatDuration } from './format'
 import { reasonLabel } from './NeedsYouPanel'
-import { agentLabel, branchOf, dotKey, quietText, repoOf, statusLabel } from './sessionFacts'
+import { DiffStat, PrPill } from './SessionRow'
+import { agentLabel, branchOf, dotKey, hasChanges, quietText, repoOf, statusLabel } from './sessionFacts'
 import styles from './SessionDetails.module.css'
 import rowStyles from './Sessions.module.css'
 
@@ -220,6 +221,20 @@ export function SessionDetails({
             <Fact label="Commit">
               <code className={styles.inline}>{shown.commit}</code>
               <span className={styles.sub}>detached HEAD</span>
+            </Fact>
+          )}
+
+          {hasChanges(shown.changes) && (
+            <Fact label="Changes">
+              <DiffStat changes={shown.changes} />
+              {shown.changes && shown.changes.untracked > 0 && (
+                <span className={styles.sub}>{shown.changes.untracked} not tracked by git yet</span>
+              )}
+              {shown.changes?.pr && (
+                <span className={styles.sub}>
+                  <PrPill pr={shown.changes.pr} />
+                </span>
+              )}
             </Fact>
           )}
 

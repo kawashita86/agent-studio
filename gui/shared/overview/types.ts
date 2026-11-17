@@ -32,6 +32,39 @@ export interface AgentActivity {
   lastExitCode: number | null
 }
 
+export type PrState = 'open' | 'draft' | 'merged' | 'closed'
+
+export interface PrSummary {
+  number: number
+  state: PrState
+  url: string
+}
+
+/** What an agent changed in its working folder (read by the daemon in the background). */
+export interface AgentChanges {
+  /** Added lines against HEAD (untracked text files count as additions). */
+  added: number
+  removed: number
+  /** Changed files, untracked ones included. */
+  files: number
+  /** Of `files`, the ones git does not track yet. */
+  untracked: number
+  /** Commits not pushed to the upstream; absent without an upstream. */
+  ahead?: number
+  behind?: number
+  pr?: PrSummary
+}
+
+/** A permission dialog of a Claude agent the Overview can answer (Allow / Deny). */
+export interface PermissionPromptInfo {
+  /** Identifies this dialog; sent back with the answer so a dialog that changed meanwhile is not answered. */
+  id: string
+  /** "Do you want to proceed?" */
+  question: string
+  /** The tool and command lines of the dialog (at most three), joined with newlines. */
+  summary?: string
+}
+
 export interface OverviewSession {
   agentId: string
   name: string
@@ -63,6 +96,10 @@ export interface OverviewSession {
   /** Epoch ms, `0` when the agent never started. */
   startedAt: number
   lastOutputAt: number
+  /** Git change facts of the agent's folder; absent for non-repositories, old daemons, and until first read. */
+  changes?: AgentChanges
+  /** The permission dialog on a waiting Claude agent's screen, when the daemon found one; absent means use Jump. */
+  permissionPrompt?: PermissionPromptInfo
 }
 
 export interface OverviewCounts {

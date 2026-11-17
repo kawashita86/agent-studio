@@ -40,6 +40,7 @@ use super::providers::{PreflightResult, get_provider};
 use super::pty::{NativePtyBackend, PtyBackend, PtyControl, PtySpawnRequest};
 use super::shell::{ShellConfig, SpawnSpec, wrap_with_shell_current};
 use super::startup::{GateState, StartupOptions, TrustGate};
+use crate::overview::permission_prompt::{PermissionPrompt, RENDER_TAIL_BYTES, detect_in_output};
 use crate::sessions::SessionSummary;
 use crate::types::{
     AgentConfig, AgentState, AgentStatus, CreateAgentPayload, MAX_CONCURRENT_AGENTS_HARD_LIMIT,
@@ -121,6 +122,18 @@ pub enum ManagerError {
     MaxAgents,
     #[error("could not create the worktree: {0}")]
     Worktree(#[from] crate::git::GitError),
+}
+
+/// Why [`AgentManager::answer_permission`] wrote nothing.
+#[derive(Debug, thiserror::Error)]
+pub enum PermissionAnswerError {
+    #[error("agent {0} not found")]
+    AgentNotFound(String),
+    /// No dialog on the screen, another dialog than the one the user saw, or not a Claude agent.
+    #[error("The prompt changed; open the agent to answer it")]
+    PromptChanged,
+    #[error("could not write to the agent")]
+    WriteFailed,
 }
 
 /// `studio/<slug of the name>-<id>`; the slug keeps ASCII letters, digits, `-`, `_` and `.`.
@@ -318,6 +331,8 @@ struct Managed {
     last_exit_code: Option<i32>,
     /// Serializes submitted inputs of this agent; replaced on restart so stale queued inputs die.
     input_lock: Arc<tokio::sync::Mutex<()>>,
+    /// Last permission-dialog detection, keyed by (bytes ever pushed, cols, rows).
+    prompt_cache: Option<((u64, u16, u16), Option<PermissionPrompt>)>,
 }
 
 impl Managed {
@@ -336,6 +351,7 @@ impl Managed {
             last_output_at: 0,
             last_exit_code: None,
             input_lock: Arc::default(),
+            prompt_cache: None,
         }
     }
 
@@ -1448,6 +1464,65 @@ impl AgentManager {
         };
         write_pty(&writer, data);
         true
+    }
+
+    /// The permission dialog a Claude agent shows on its screen right now. Replays the tail of
+    /// the output into a terminal of the agent's size; cached until the output or size changes.
+    /// `None` for other providers, agents without a process, and screens without a dialog.
+    pub fn permission_prompt(&self, id: &str) -> Option<PermissionPrompt> {
+        let (key, tail) = {
+            let inner = self.shared.inner.lock();
+            let m = &inner.agents[inner.idx(id)?];
+            if m.state.provider != ProviderId::Claude || m.run.is_none() {
+                return None;
+            }
+            let key = (m.output.total_pushed(), m.cols, m.rows);
+            if let Some((cached, prompt)) = &m.prompt_cache
+                && *cached == key
+            {
+                return prompt.clone();
+            }
+            (key, m.output.tail_vec(RENDER_TAIL_BYTES))
+        };
+        // The replay runs without the lock.
+        let prompt = detect_in_output(&tail, key.1, key.2);
+        let mut inner = self.shared.inner.lock();
+        if let Some(i) = inner.idx(id) {
+            inner.agents[i].prompt_cache = Some((key, prompt.clone()));
+        }
+        prompt
+    }
+
+    /// Answer the permission dialog `prompt_id` of a Claude agent: its "Yes" key when `allow`,
+    /// Esc otherwise. The screen is re-read first; nothing is written when the dialog is gone or
+    /// is another one than the user saw.
+    pub fn answer_permission(
+        &self,
+        id: &str,
+        prompt_id: &str,
+        allow: bool,
+    ) -> Result<(), PermissionAnswerError> {
+        if self.get(id).is_none() {
+            return Err(PermissionAnswerError::AgentNotFound(id.to_string()));
+        }
+        let prompt = self
+            .permission_prompt(id)
+            .filter(|p| p.id == prompt_id)
+            .ok_or(PermissionAnswerError::PromptChanged)?;
+        let key = if allow {
+            // `allow_key` is a single digit in practice; two-digit option numbers are not Claude's.
+            let digit = char::from_digit(u32::from(prompt.allow_key), 10)
+                .ok_or(PermissionAnswerError::PromptChanged)?;
+            vec![digit as u8]
+        } else {
+            vec![0x1b]
+        };
+        tracing::info!(agent = id, allow, prompt = %prompt.id, "answering permission prompt");
+        if self.send_raw_input(id, &key) {
+            Ok(())
+        } else {
+            Err(PermissionAnswerError::WriteFailed)
+        }
     }
 
     /// Submit `input` to every agent of `project_dir`; returns the ids it reached.
@@ -3359,6 +3434,62 @@ mod tests {
             pty.written().ends_with("/rename New name\r")
         })
         .await;
+    }
+
+    // ── permission prompt answers ───────────────────────────────────────────
+
+    const PERMISSION_DIALOG: &[u8] = b"\x1b[2J\x1b[H Bash command\r\n mkdir x\r\n Do you want to proceed?\r\n \xe2\x9d\xaf 1. Yes\r\n   2. No\r\n Esc to cancel";
+
+    #[tokio::test]
+    async fn answering_a_permission_prompt_writes_the_key_only_for_the_dialog_on_screen() {
+        let backend = FakePtyBackend::new();
+        let manager = manager_with(&backend);
+        let agent = manager.create(payload()).await.unwrap();
+        let pty = backend.ptys()[0].clone();
+        assert_eq!(manager.permission_prompt(&agent.id), None);
+        pty.emit_data(PERMISSION_DIALOG);
+        wait_for("dialog buffered", || {
+            manager.permission_prompt(&agent.id).is_some()
+        })
+        .await;
+        let prompt = manager.permission_prompt(&agent.id).unwrap();
+        assert_eq!(prompt.allow_key, 1);
+
+        // A stale or wrong id writes nothing.
+        let err = manager
+            .answer_permission(&agent.id, "other", true)
+            .unwrap_err();
+        assert_eq!(
+            err.to_string(),
+            "The prompt changed; open the agent to answer it"
+        );
+        assert!(matches!(
+            manager.answer_permission("nope", &prompt.id, true),
+            Err(PermissionAnswerError::AgentNotFound(_))
+        ));
+        assert_eq!(pty.written(), "");
+
+        manager
+            .answer_permission(&agent.id, &prompt.id, true)
+            .unwrap();
+        assert_eq!(pty.written(), "1");
+        manager
+            .answer_permission(&agent.id, &prompt.id, false)
+            .unwrap();
+        assert_eq!(pty.written(), "1\x1b");
+
+        // The dialog is gone from the screen: refused, nothing written.
+        pty.emit_data(b"\x1b[2J\x1b[Hworking");
+        wait_for("dialog gone", || {
+            manager.permission_prompt(&agent.id).is_none()
+        })
+        .await;
+        assert!(
+            manager
+                .answer_permission(&agent.id, &prompt.id, true)
+                .is_err()
+        );
+        assert_eq!(pty.written(), "1\x1b");
     }
 
     // ── /rename on resume ───────────────────────────────────────────────────

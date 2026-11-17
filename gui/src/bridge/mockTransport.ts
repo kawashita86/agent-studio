@@ -86,6 +86,7 @@ export function createMockTransport(options: { appInfo?: AppInfo } = {}): MockTr
 
     // Connection state (always connected: there is no daemon)
     getDaemonStatus: () => ({ connected: true }),
+    answerPermission: noop,
     previewHydraImport: () => ({
       dir: '~/.config/Hydra',
       configChanges: [{ key: 'theme', current: 'dark', incoming: 'midnight' }],

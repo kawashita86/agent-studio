@@ -167,6 +167,8 @@ export interface HydraAPI {
   /** State of the connection to the daemon (`connected: false` until the shell reached it). */
   getDaemonStatus: () => Promise<{ connected: boolean; error?: string }>
   onDaemonStatus: (callback: (status: { connected: boolean; error?: string }) => void) => () => void
+  /** Allow or deny the permission dialog `promptId` of a Claude agent (`OverviewSession.permissionPrompt.id`). Rejects with the daemon's message, for example when the dialog changed meanwhile. */
+  answerPermission: (agentId: string, promptId: string, allow: boolean) => Promise<void>
   /** What importing Hydra's config and agents would change (`dir`: Hydra's data folder, default location when omitted); rejects when there is nothing to import. */
   previewHydraImport: (dir?: string) => Promise<ImportPreview>
   /** Merge Hydra's config and agents into this app's; resolves with what was applied. */
@@ -293,6 +295,7 @@ export function createHydraApi(bridge: Bridge): HydraAPI {
     onFreeTerminalExit: (callback: (terminalId: string, projectDir: string, exitCode: number) => void) => bridge.subscribe('onFreeTerminalExit', callback),
     onFreeTerminalLayoutChanged: (callback: (projectDir: string, layout: FreeTerminalLayout) => void) => bridge.subscribe('onFreeTerminalLayoutChanged', callback),
     getDaemonStatus: () => bridge.call<{ connected: boolean; error?: string }>('getDaemonStatus'),
+    answerPermission: (agentId: string, promptId: string, allow: boolean) => bridge.call<void>('answerPermission', agentId, promptId, allow),
     previewHydraImport: (dir?: string) => bridge.call<ImportPreview>('previewHydraImport', dir),
     applyHydraImport: (dir?: string) => bridge.call<ImportReport>('applyHydraImport', dir),
     onDaemonStatus: (callback: (status: { connected: boolean; error?: string }) => void) => bridge.subscribe('onDaemonStatus', callback),

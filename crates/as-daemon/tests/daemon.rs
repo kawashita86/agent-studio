@@ -285,6 +285,32 @@ async fn agent_flow_output_status_and_clean_shutdown() {
 }
 
 #[tokio::test]
+async fn answer_permission_writes_the_key_only_for_the_dialog_on_screen() {
+    let h = start().await;
+    let client = DaemonClient::connect(&h.paths).await.unwrap();
+    let agent = client.create_agent(payload()).await.unwrap();
+    let pty = h.backend.ptys()[0].clone();
+    pty.emit_data(b"\x1b[2J\x1b[H Bash command\r\n mkdir x\r\n Do you want to proceed?\r\n \xe2\x9d\xaf 1. Yes\r\n   2. No\r\n Esc to cancel");
+    // A wrong prompt id is refused with the typed message and nothing is written.
+    let mut refused = String::new();
+    for _ in 0..200 {
+        refused = client
+            .answer_permission(&agent.id, "stale", true)
+            .await
+            .unwrap_err()
+            .to_string();
+        if refused.contains("The prompt changed") {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert!(refused.contains("The prompt changed; open the agent to answer it"));
+    assert_eq!(pty.written(), "");
+    h.stop.cancel();
+    h.task.await.unwrap().unwrap();
+}
+
+#[tokio::test]
 async fn shutdown_without_force_is_refused_while_an_agent_runs() {
     let h = start().await;
     exit_on_terminate(&h.backend);
