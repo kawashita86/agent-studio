@@ -64,6 +64,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: release-${{ matrix.target }}
+          # A tag run can only restore caches of its own tag or of main, so a cache saved here is never reused by the next
+          # release (it only took ~2 GB per tag of the 10 GB repo limit and evicted the CI caches).
+          save-if: false
 
       - name: Check that the tag matches Cargo.toml
         if: github.ref_type == 'tag'
