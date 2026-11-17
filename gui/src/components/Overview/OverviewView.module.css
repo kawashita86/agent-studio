@@ -24,11 +24,6 @@
   font-weight: var(--font-weight-semibold);
 }
 
-.summary {
-  font-size: var(--font-size-sm);
-  color: var(--color-text-secondary);
-}
-
 .spacer {
   flex: 1;
 }
@@ -62,9 +57,9 @@
 .grid {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
-  grid-template-areas: 'usage usage'
-    'needs lastHour'
-    'sessions events'
+  grid-template-areas: 'needs needs'
+    'sessions sessions'
+    'lastHour events'
     'timeline timeline'
     'waits waits';
   gap: var(--space-4);
@@ -74,18 +69,13 @@
 
   .grid {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: 'usage'
-      'needs'
-      'lastHour'
+    grid-template-areas: 'needs'
       'sessions'
+      'lastHour'
       'events'
       'timeline'
       'waits';
   }
-}
-
-.usage {
-  grid-area: usage;
 }
 
 .needs {
@@ -121,6 +111,16 @@
   flex-direction: column;
   min-width: 0;
   min-height: 120px;
+}
+
+/* Sized by its items (or the one-line all-clear), not by a grid row shared with another card. */
+.card.needs {
+  min-height: 0;
+}
+
+.card:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 
 .cardHeader {
@@ -206,35 +206,9 @@
 }
 
 .needsBody {
-  height: 100%;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
   gap: var(--space-3);
-}
-
-.cardTitleBtn {
-  background: transparent;
-  border: none;
-  padding: 0;
-  font: inherit;
-  text-transform: inherit;
-  letter-spacing: inherit;
-  color: inherit;
-  cursor: pointer;
-  text-decoration: underline dotted;
-  text-underline-offset: 3px;
-}
-
-.cardTitleBtn:hover,
-.cardTitleBtn[aria-expanded='true'] {
-  color: var(--color-text-primary);
-}
-
-.cardTitleBtn:focus-visible {
-  outline: 2px solid var(--color-text-secondary);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
 }
 
 .summaryBlock {

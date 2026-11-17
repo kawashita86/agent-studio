@@ -5,7 +5,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DEFAULT_USAGE_SETTINGS, type UsageSettings } from '@shared/usage/settings'
 import { DEFAULT_CONFIG } from '@shared/types'
 import { SettingsPanel } from '../Settings/SettingsPanel'
-import { UsageCard } from '../Overview/UsageCard'
 import { UsageChip } from './UsageChip'
 import { UsageMenu } from './UsageMenu'
 import { UsageSettingsProvider } from './UsageSettingsContext'
@@ -95,16 +94,6 @@ describe('cost visibility', () => {
     render(<UsageMenu state={usageState()} onOpenReport={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: /Usage and limits/ }))
     expect(await screen.findByText(/API-equivalent/)).toBeTruthy()
-  })
-
-  it('hides the cost on the Overview card', async () => {
-    render(
-      <UsageSettingsProvider settings={settings({ showCost: false })}>
-        <UsageCard state={usageState()} projectDir="" />
-      </UsageSettingsProvider>
-    )
-    await screen.findAllByText('48.2M')
-    expect(screen.queryByText(/API-equivalent/)).toBeNull()
   })
 })
 

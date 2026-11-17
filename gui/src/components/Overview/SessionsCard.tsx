@@ -6,6 +6,7 @@ import { groupByRepo, groupByStatus, type SessionGroup } from '@shared/overview/
 import { Card, EmptyState } from './Card'
 import { SessionRow, type SessionItemProps } from './SessionRow'
 import { SessionsBoard } from './SessionsBoard'
+import { STATUS_FILTER_LABELS, type StatusFilter } from './StatusStrip'
 import { folderOf, repoOf } from './sessionFacts'
 import styles from './Sessions.module.css'
 
@@ -43,6 +44,9 @@ interface SessionsCardProps {
   selectedId: string | null
   onOpenDetails: SessionItemProps['onOpenDetails']
   onJumpToAgent: SessionItemProps['onJumpToAgent']
+  /** Shows only sessions with this status; set from the status strip. */
+  statusFilter?: StatusFilter | null
+  onClearFilter?: () => void
 }
 
 function Groups({
@@ -54,7 +58,7 @@ function Groups({
   groups: SessionGroup[]
   repos: boolean
   selectedId: string | null
-} & Omit<SessionsCardProps, 'sessions' | 'selectedId'>) {
+} & Omit<SessionsCardProps, 'sessions' | 'selectedId' | 'statusFilter' | 'onClearFilter'>) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
   const toggle = (key: string) =>
     setExpanded((prev) => {
@@ -103,7 +107,7 @@ function Groups({
   )
 }
 
-export function SessionsCard({ sessions, selectedId, ...rest }: SessionsCardProps) {
+export function SessionsCard({ sessions: all, selectedId, statusFilter, onClearFilter, ...rest }: SessionsCardProps) {
   const [layout, setLayout] = useState<SessionsLayout>(readLayout)
 
   const choose = (next: SessionsLayout) => {
@@ -111,28 +115,49 @@ export function SessionsCard({ sessions, selectedId, ...rest }: SessionsCardProp
     writeLayout(next)
   }
 
+  const sessions = useMemo(
+    () => (statusFilter ? all.filter((s) => s.status === statusFilter) : all),
+    [all, statusFilter]
+  )
   const statusGroups = useMemo(() => groupByStatus(sessions), [sessions])
   const repoGroups = useMemo(() => groupByRepo(sessions, repoOf), [sessions])
 
   const control = (
-    <div className={styles.segmented} role="group" aria-label="Sessions layout">
-      {LAYOUTS.map((l) => (
+    <>
+      {statusFilter && (
         <button
-          key={l.id}
           type="button"
-          className={`${styles.segment} ${layout === l.id ? styles.segmentActive : ''}`}
-          aria-pressed={layout === l.id}
-          onClick={() => choose(l.id)}
+          className={styles.filterChip}
+          onClick={onClearFilter}
+          aria-label={`Clear filter: ${STATUS_FILTER_LABELS[statusFilter]}`}
+          title="Show all statuses"
         >
-          {l.label}
+          Filtered: {STATUS_FILTER_LABELS[statusFilter]} <span aria-hidden="true">×</span>
         </button>
-      ))}
-    </div>
+      )}
+      <div className={styles.segmented} role="group" aria-label="Sessions layout">
+        {LAYOUTS.map((l) => (
+          <button
+            key={l.id}
+            type="button"
+            className={`${styles.segment} ${layout === l.id ? styles.segmentActive : ''}`}
+            aria-pressed={layout === l.id}
+            onClick={() => choose(l.id)}
+          >
+            {l.label}
+          </button>
+        ))}
+      </div>
+    </>
   )
 
   let body
   if (sessions.length === 0) {
-    body = <EmptyState>No agents in this project</EmptyState>
+    body = (
+      <EmptyState>
+        {statusFilter ? `No ${STATUS_FILTER_LABELS[statusFilter].toLowerCase()} agents` : 'No agents in this project'}
+      </EmptyState>
+    )
   } else if (layout === 'board') {
     body = <SessionsBoard sessions={sessions} selectedId={selectedId} {...rest} />
   } else if (layout === 'repos') {

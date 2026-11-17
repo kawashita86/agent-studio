@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import type { HistoryAgent, HistoryPoint, OverviewCounts, OverviewStatus } from '@shared/overview/types'
 import type { CountKey } from '@shared/overview/buckets'
 import { CountHistory } from './CountHistory'
-import { CountsRow } from './CountsRow'
+import { StatusStrip } from './StatusStrip'
 import { LastHourChart } from './LastHourChart'
 import { TimelineCard } from './TimelineCard'
 
@@ -134,10 +134,13 @@ function Harness({ points }: { points: HistoryPoint[] }) {
   const trigger = useRef<HTMLElement | null>(null)
   return (
     <div>
-      <CountsRow
+      <StatusStrip
         counts={counts}
+        filter={null}
+        onToggleFilter={() => undefined}
+        onFocusNeeds={() => undefined}
         openChart={key}
-        onOpenChart={(k, el) => {
+        onOpenChart={(k: CountKey, el: HTMLElement) => {
           trigger.current = el
           setKey(k)
         }}

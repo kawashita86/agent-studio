@@ -20,7 +20,7 @@ interface NeedsYouPanelProps {
   onJumpToAgent: (agentId: string) => void
   /** Opens the details drawer; the agent name becomes a button when given. */
   onOpenDetails?: (agentId: string, trigger: HTMLElement | null) => void
-  /** Rendered in the empty state when provided. */
+  /** Appended to the all-clear line when provided. */
   lastWait?: LastWait
 }
 
@@ -128,29 +128,20 @@ function Item({
 
 function AllClear({ lastWait, now }: { lastWait?: LastWait; now: number }) {
   return (
-    <div className={styles.clear}>
-      <div className={styles.clearMain}>
-        <h3 className={styles.clearTitle}>
-          <span className={styles.clearIcon} aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <path d="M7.5 12.5l3 3 6-6.5" />
-            </svg>
-          </span>
-          Nothing needs you
-        </h3>
-        <p className={styles.clearText}>When an agent stops to ask for something, it will show here.</p>
-      </div>
+    <p className={styles.clear}>
+      <span className={styles.clearIcon} aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <path d="M7.5 12.5l3 3 6-6.5" />
+        </svg>
+      </span>
+      <strong className={styles.clearTitle}>Nothing needs you</strong>
       {lastWait && (
-        <div className={styles.lastWait}>
-          <span className={styles.lastWaitLabel}>Last wait</span>
-          <span className={styles.lastWaitValue}>{formatDuration(lastWait.waitedMs)}</span>
-          <span className={styles.lastWaitWho}>
-            <strong>{lastWait.name}</strong>, answered at {formatMinute(lastWait.endedAt, now)}
-          </span>
-        </div>
+        <span className={styles.lastWait}>
+          · last wait {formatDuration(lastWait.waitedMs)}, {lastWait.name}, answered at {formatMinute(lastWait.endedAt, now)}
+        </span>
       )}
-    </div>
+    </p>
   )
 }
 

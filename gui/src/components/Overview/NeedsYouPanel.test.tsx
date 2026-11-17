@@ -99,13 +99,12 @@ describe('NeedsYouPanel', () => {
     expect(onJump).toHaveBeenCalledWith('b')
   })
 
-  it('shows the empty state, and the last wait when provided', () => {
-    const { rerender } = render(
+  it('shows a one-line all-clear, with the last wait when provided', () => {
+    const { rerender, container } = render(
       <NeedsYouPanel sessions={[]} now={NOW} showProvider={false} onJumpToAgent={vi.fn()} />
     )
-    expect(screen.getByRole('heading', { name: 'Nothing needs you' })).toBeTruthy()
-    expect(screen.getByText(/it will show here/)).toBeTruthy()
-    expect(screen.queryByText('Last wait')).toBeNull()
+    expect(screen.getByText('Nothing needs you')).toBeTruthy()
+    expect(screen.queryByText(/last wait/)).toBeNull()
     rerender(
       <NeedsYouPanel
         sessions={[]}
@@ -115,10 +114,8 @@ describe('NeedsYouPanel', () => {
         lastWait={{ name: 'agent-z', waitedMs: 65_000, endedAt: NOW - 120_000 }}
       />
     )
-    expect(screen.getByText('Last wait')).toBeTruthy()
-    expect(screen.getByText('1m 05s')).toBeTruthy()
-    expect(screen.getByText('agent-z')).toBeTruthy()
-    expect(screen.getByText(/answered at/)).toBeTruthy()
+    expect(container.querySelectorAll('p')).toHaveLength(1)
+    expect(container.textContent).toMatch(/Nothing needs you\s*· last wait 1m 05s, agent-z, answered at /)
   })
 })
 

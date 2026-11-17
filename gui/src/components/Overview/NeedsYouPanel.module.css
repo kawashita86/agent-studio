@@ -167,77 +167,30 @@
   background: var(--color-action-hover);
 }
 
-/* ── All clear ─────────────────────────────────────────────────────────── */
+/* ── All clear: one line ──────────────────────────────────────────────── */
 
 .clear {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3) var(--space-4);
-  padding: var(--space-2) 0;
-}
-
-.clearMain {
-  min-width: 0;
-}
-
-.clearTitle {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
+  gap: var(--space-2);
   margin: 0;
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-  line-height: 1.2;
-}
-
-.clearIcon {
-  width: 22px;
-  height: 22px;
-  flex-shrink: 0;
-  color: var(--color-status-running);
-}
-
-.clearText {
-  margin: var(--space-2) 0 0;
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
 }
 
+.clearIcon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--color-status-running);
+}
+
+.clearTitle {
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
 .lastWait {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 2px;
-  text-align: right;
   min-width: 0;
-}
-
-.lastWaitLabel {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
-}
-
-.lastWaitValue {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-semibold);
-  color: var(--color-text-primary);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.2;
-}
-
-.lastWaitWho {
-  font-size: var(--font-size-xs);
-  color: var(--color-text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
-}
-
-.lastWaitWho strong {
-  color: var(--color-text-primary);
-  font-weight: var(--font-weight-semibold);
 }
