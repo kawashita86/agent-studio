@@ -7,21 +7,20 @@ import { computeCounts } from '@shared/overview/status'
 import { useNow, useOverviewSnapshot, type OverviewData } from '@/hooks/useOverview'
 import { useOverviewHistory } from '@/hooks/useOverviewHistory'
 import { useOverviewWaits } from '@/hooks/useOverviewWaits'
-import { Card, EmptyState } from './Card'
+import { ActivityCard } from './ActivityCard'
+import { Card } from './Card'
 import { CountHistory } from './CountHistory'
 import { projectName } from './format'
-import { EventsCard } from './EventsCard'
 import { lastWaitFrom } from './historyFacts'
-import { LastHourChart } from './LastHourChart'
 import { LimitsBar } from './LimitsBar'
-import { NeedsYouPanel } from './NeedsYouPanel'
+import { KeyboardHint, NeedsYouPanel } from './NeedsYouPanel'
 import { OwnEvents } from './OwnEvents'
 import { SessionDetails } from './SessionDetails'
 import { SessionsCard } from './SessionsCard'
 import { StatusStrip, type StatusFilter } from './StatusStrip'
-import { WaitedOnYou } from './WaitedOnYou'
-import { WaitsCard } from './WaitsCard'
-import { OwnTimeline, TimelineCard } from './TimelineCard'
+import { SinceAwayCard } from './SinceAwayCard'
+import { OwnTimeline } from './TimelineBody'
+import { useLastSeen } from './useLastSeen'
 import styles from './OverviewView.module.css'
 
 const FILTER_STORAGE_KEY = 'agentStudio.overview.projectFilter'
@@ -65,6 +64,7 @@ export function OverviewView({ onOpenNewAgent, onJumpToAgent, overview, usage, o
   const now = useNow()
   const { history } = useOverviewHistory()
   const { ledger } = useOverviewWaits()
+  const lastSeen = useLastSeen()
   const [storedFilter, setStoredFilter] = useState<string>(readStoredFilter)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [chartKey, setChartKey] = useState<CountKey | null>(null)
@@ -281,19 +281,27 @@ export function OverviewView({ onOpenNewAgent, onJumpToAgent, overview, usage, o
           attention={counts.needsYou > 0}
           meta={counts.needsYou > 0 ? counts.needsYou : undefined}
           focusRef={needsRef}
+          actions={needsYou.length > 0 ? <KeyboardHint /> : undefined}
         >
-          <div className={styles.needsBody}>
-            <NeedsYouPanel
-              sessions={needsYou}
-              now={now}
-              showProvider={multipleProviders}
-              onJumpToAgent={jump}
-              onOpenDetails={openDetails}
-              lastWait={lastWait}
-            />
-            {waited && <WaitedOnYou bars={waited.bars} from={waited.from} unmeasuredMs={waited.unmeasuredMs} />}
-          </div>
+          <NeedsYouPanel
+            sessions={needsYou}
+            now={now}
+            showProvider={multipleProviders}
+            onJumpToAgent={jump}
+            onOpenDetails={openDetails}
+            lastWait={lastWait}
+          />
         </Card>
+
+        <SinceAwayCard
+          history={history}
+          filter={filter}
+          now={now}
+          lastSeen={lastSeen.marker}
+          awayFrom={lastSeen.visitFrom}
+          onClearMarker={lastSeen.clearMarker}
+          onOpenAgent={openDetails}
+        />
 
         <SessionsCard
           sessions={sessions}
@@ -306,25 +314,17 @@ export function OverviewView({ onOpenNewAgent, onJumpToAgent, overview, usage, o
           onClearFilter={() => setStatusFilter(null)}
         />
 
-        <Card title="Last hour" area="lastHour">
-          {historyPoints && historyStarts ? (
-            <LastHourChart points={historyPoints} starts={historyStarts} now={now} agentFilter={agentFilter} />
-          ) : (
-            <EmptyState>No history yet</EmptyState>
-          )}
-        </Card>
-
-        <EventsCard history={history} filter={filter} now={now} onOpenAgent={openDetails} />
-
-        <TimelineCard
-          points={historyPoints ?? noPoints}
-          starts={historyStarts ?? noPoints}
+        <ActivityCard
+          points={historyPoints}
+          starts={historyStarts}
           now={now}
           agents={historyAgents ?? NO_AGENTS}
           agentFilter={agentFilter}
+          ledger={ledger}
+          waitingNow={waitingNow}
+          waitsFilter={waitsFilter}
+          waited={waited}
         />
-
-        <WaitsCard ledger={ledger} waitingNow={waitingNow} now={now} agentFilter={waitsFilter} />
       </div>
 
       {selectedId && (

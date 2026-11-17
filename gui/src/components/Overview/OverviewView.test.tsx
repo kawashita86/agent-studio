@@ -71,13 +71,18 @@ describe('OverviewView', () => {
     expect(window.localStorage.getItem('agentStudio.overview.projectFilter')).toBe('/work/beta')
   })
 
-  it('puts Needs you and Sessions first, full width, before the other cards', async () => {
+  it('orders the cards: Needs you, Since you were away, Sessions, Activity', async () => {
     mockSnapshot([session('1', '/work/alpha'), session('2', '/work/alpha', 'needs-you')])
     render(<OverviewView />)
     await screen.findByLabelText('Project filter')
     const order = screen.getAllByRole('region').map((r) => r.getAttribute('aria-label'))
-    expect(order.indexOf('Needs you')).toBeLessThan(order.indexOf('Sessions'))
-    expect(order.indexOf('Sessions')).toBeLessThan(order.indexOf('Last hour'))
+    const away = order.findIndex((l) => l === 'Last hour of events' || l?.startsWith('Since you were away'))
+    expect(order.indexOf('Needs you')).toBeLessThan(away)
+    expect(away).toBeLessThan(order.indexOf('Sessions'))
+    expect(order.indexOf('Sessions')).toBeLessThan(order.indexOf('Activity'))
+    expect(order).not.toContain('Timeline')
+    expect(order).not.toContain('Waits')
+    expect(order).not.toContain('Events')
     expect(screen.queryByText(/need you · /)).toBeNull()
   })
 

@@ -58,10 +58,9 @@
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
   grid-template-areas: 'needs needs'
+    'away away'
     'sessions sessions'
-    'lastHour events'
-    'timeline timeline'
-    'waits waits';
+    'activity activity';
   gap: var(--space-4);
 }
 
@@ -70,11 +69,9 @@
   .grid {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas: 'needs'
+      'away'
       'sessions'
-      'lastHour'
-      'events'
-      'timeline'
-      'waits';
+      'activity';
   }
 }
 
@@ -82,24 +79,16 @@
   grid-area: needs;
 }
 
-.lastHour {
-  grid-area: lastHour;
+.away {
+  grid-area: away;
 }
 
 .sessions {
   grid-area: sessions;
 }
 
-.events {
-  grid-area: events;
-}
-
-.timeline {
-  grid-area: timeline;
-}
-
-.waits {
-  grid-area: waits;
+.activity {
+  grid-area: activity;
 }
 
 .card {
@@ -114,7 +103,8 @@
 }
 
 /* Sized by its items (or the one-line all-clear), not by a grid row shared with another card. */
-.card.needs {
+.card.needs,
+.card.away {
   min-height: 0;
 }
 
@@ -203,12 +193,6 @@
 
 .primaryBtn:hover {
   background: var(--color-action-hover);
-}
-
-.needsBody {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
 }
 
 .summaryBlock {

@@ -1,56 +1,35 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { HistoryResponse } from '@shared/overview/types'
-import { Card, EmptyState } from './Card'
+import { EmptyState } from './Card'
 import { EventRow } from './EventRow'
 import rowStyles from './EventRow.module.css'
 import { formatMinute, formatTimeOfDay } from './format'
-import { CLEAR_AFTER_MS, newSinceMarker, readLastSeen, writeLastSeen } from './newSince'
-import styles from './EventsCard.module.css'
+import { CLEAR_AFTER_MS, newSinceMarker } from './newSince'
+import { eventsForProject } from './sinceAway'
+import styles from './EventsLog.module.css'
 
 const PAGE = 200
 
-interface EventsCardProps {
+interface EventsLogProps {
   history: HistoryResponse | null
   /** Project directory to show, `''` for all. */
   filter: string
   now: number
+  /** The shared last-seen marker (see `useLastSeen`), `null` once cleared. */
+  lastSeen: number | null
+  onClearMarker: () => void
   onOpenAgent: (agentId: string, trigger: HTMLElement) => void
 }
 
-/**
- * The time the user last saw the Overview. Written when the card goes away or the
- * document is hidden, re-read when the document is shown again. `null` once the marker has been cleared.
- */
-function useLastSeen(): [number | null, () => void] {
-  const [lastSeen, setLastSeen] = useState<number | null>(readLastSeen)
-  useEffect(() => {
-    const onVisibility = () => {
-      if (document.visibilityState === 'hidden') writeLastSeen(Date.now())
-      else setLastSeen(readLastSeen())
-    }
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => {
-      document.removeEventListener('visibilitychange', onVisibility)
-      writeLastSeen(Date.now())
-    }
-  }, [])
-  const clear = useCallback(() => setLastSeen(null), [])
-  return [lastSeen, clear]
-}
-
-export function EventsCard({ history, filter, now, onOpenAgent }: EventsCardProps) {
-  const [lastSeen, clearMarker] = useLastSeen()
+/** The full events log, newest first, with the "New since" divider. Shown inside the digest card. */
+export function EventsLog({ history, filter, now, lastSeen, onClearMarker: clearMarker, onOpenAgent }: EventsLogProps) {
   const [limit, setLimit] = useState(PAGE)
   const [dividerEl, setDivider] = useState<HTMLLIElement | null>(null)
 
-  const events = useMemo(() => {
-    if (!history) return []
-    const all = history.events.filter((e) => {
-      if (filter === '' || e.kind === 'resumed') return true
-      return (history.agents[e.agentId]?.projectDir ?? e.projectDir) === filter
-    })
-    return all.sort((a, b) => b.at - a.at)
-  }, [history, filter])
+  const events = useMemo(
+    () => eventsForProject(history, filter).sort((a, b) => b.at - a.at),
+    [history, filter]
+  )
 
   const marker = useMemo(() => newSinceMarker(events, lastSeen), [events, lastSeen])
   const markerAt = marker?.at
@@ -93,7 +72,7 @@ export function EventsCard({ history, filter, now, onOpenAgent }: EventsCardProp
   const since = history ? history.since : null
 
   return (
-    <Card title="Events" area="events" meta={marker ? `${marker.count} new` : undefined}>
+    <>
       {events.length === 0 ? (
         <EmptyState>No events yet</EmptyState>
       ) : (
@@ -119,6 +98,6 @@ export function EventsCard({ history, filter, now, onOpenAgent }: EventsCardProp
           </div>
         </div>
       )}
-    </Card>
+    </>
   )
 }

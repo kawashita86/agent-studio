@@ -4,7 +4,7 @@ import styles from './OverviewView.module.css'
 interface CardProps {
   title: string
   /** Grid area name, see OverviewView.module.css. */
-  area: 'needs' | 'lastHour' | 'sessions' | 'events' | 'timeline' | 'waits'
+  area: 'needs' | 'away' | 'sessions' | 'activity'
   /** Short text on the right of the title. */
   meta?: ReactNode
   /** Controls placed in the header, before the meta text. */

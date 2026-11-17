@@ -8,7 +8,7 @@ import type { CountKey } from '@shared/overview/buckets'
 import { CountHistory } from './CountHistory'
 import { StatusStrip } from './StatusStrip'
 import { LastHourChart } from './LastHourChart'
-import { TimelineCard } from './TimelineCard'
+import { TimelineBody } from './TimelineBody'
 
 const MIN = 60_000
 const NOW = Date.UTC(2026, 0, 1, 12, 7, 0)
@@ -79,7 +79,7 @@ describe('LastHourChart', () => {
   })
 })
 
-describe('TimelineCard', () => {
+describe('TimelineBody', () => {
   afterEach(cleanup)
 
   const agents: Record<string, HistoryAgent> = {
@@ -95,7 +95,7 @@ describe('TimelineCard', () => {
     ]
     // `old` last seen 70 minutes ago would be hidden: put it outside the window
     const outside = run(NOW - 90 * MIN, NOW - 80 * MIN, { old: 'idle' })
-    render(<TimelineCard points={[...outside, ...points]} starts={[]} now={NOW} agents={agents} />)
+    render(<TimelineBody points={[...outside, ...points]} starts={[]} now={NOW} agents={agents} />)
     const rows = screen.getAllByRole('listitem').filter((li) => li.hasAttribute('data-agent'))
     expect(rows.map((r) => r.getAttribute('data-agent'))).toEqual(['a', 'b', 'old'])
     expect(within(rows[0]).getByText('alpha')).toBeTruthy()
@@ -104,7 +104,7 @@ describe('TimelineCard', () => {
 
   it('hides agents that have no segment in the hour', () => {
     const points = [...run(NOW - 90 * MIN, NOW - 80 * MIN, { old: 'idle' }), ...run(NOW - 10 * MIN, NOW, { a: 'idle' })]
-    render(<TimelineCard points={points} starts={[]} now={NOW} agents={agents} />)
+    render(<TimelineBody points={points} starts={[]} now={NOW} agents={agents} />)
     expect(screen.queryByText('old-one')).toBeNull()
     expect(screen.getByText('alpha')).toBeTruthy()
   })
@@ -112,14 +112,14 @@ describe('TimelineCard', () => {
   it('applies the project filter', () => {
     const points = run(NOW - 10 * MIN, NOW, { a: 'idle', b: 'working' })
     render(
-      <TimelineCard points={points} starts={[]} now={NOW} agents={agents} agentFilter={(id) => agents[id].projectDir === '/p/two'} />
+      <TimelineBody points={points} starts={[]} now={NOW} agents={agents} agentFilter={(id) => agents[id].projectDir === '/p/two'} />
     )
     expect(screen.queryByText('alpha')).toBeNull()
     expect(screen.getByText('beta')).toBeTruthy()
   })
 
   it('shows an empty state without history', () => {
-    render(<TimelineCard points={[]} starts={[]} now={NOW} agents={agents} />)
+    render(<TimelineBody points={[]} starts={[]} now={NOW} agents={agents} />)
     expect(screen.getByText('No history yet')).toBeTruthy()
   })
 })
