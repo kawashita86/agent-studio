@@ -1,5 +1,5 @@
 import { PROVIDER_LABELS, PROVIDER_MODELS } from '@shared/types'
-import type { OverviewSession, OverviewStatus } from '@shared/overview/types'
+import type { AgentChanges, OverviewSession, OverviewStatus, PrSummary } from '@shared/overview/types'
 import { formatDuration, projectName } from './format'
 
 export const STATUS_LABEL: Record<OverviewStatus, string> = {
@@ -47,4 +47,33 @@ export function folderOf(session: OverviewSession): string {
 /** Repository name for grouping, `null` when unknown. */
 export function repoOf(session: OverviewSession): string | null {
   return session.repoName ?? null
+}
+
+/** `6 files`; null when nothing changed. */
+export function diffText(changes: AgentChanges | undefined): string | null {
+  if (!changes || (changes.files === 0 && changes.added === 0 && changes.removed === 0)) return null
+  return `${changes.files} ${changes.files === 1 ? 'file' : 'files'}`
+}
+
+/** `2 commits not pushed`, or null. */
+export function aheadTitle(changes: AgentChanges | undefined): string | null {
+  const n = changes?.ahead ?? 0
+  return n > 0 ? `${n} ${n === 1 ? 'commit' : 'commits'} not pushed` : null
+}
+
+/** `PR #31 open`. */
+export function prLabel(pr: PrSummary): string {
+  return `PR #${pr.number} ${pr.state}`
+}
+
+/** Only the web URLs of a pull request are opened. */
+export function isWebUrl(url: string): boolean {
+  return /^https?:\/\//i.test(url)
+}
+
+/** Whether there is anything about changes to show. */
+export function hasChanges(changes: AgentChanges | undefined): boolean {
+  return (
+    !!changes && (diffText(changes) !== null || aheadTitle(changes) !== null || changes.untracked > 0 || !!changes.pr)
+  )
 }

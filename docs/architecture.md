@@ -79,6 +79,13 @@ The daemon is the same binary as the app (`agent-studio daemon --home <dir>`, hi
   only when something meaningful changed (never for timers; clients tick their own clock), `OverviewEvents` with every
   poll's new events (appeared / status with `waitedMs` when leaving needs-you / ended / resumed after a gap > 15 s).
   `GetAgentDetails` reads the last message and the token counts of the newest reply from the transcript on demand.
+  **Changes (P8, `overview::changes`)**: each `OverviewSession` may carry `changes { added, removed, files, untracked,
+  ahead?, behind?, pr? { number, state open|draft|merged|closed, url } }` for the agent's working folder (its worktree,
+  else its project folder). The tracker never waits for git: `ChangesCache` returns the last value and, when it is
+  older than 45 s (or the agent's status changed, debounced to 5 s), starts a background thread running `git status`
+  + `git diff --numstat` through `GitRunner`; the PR (`gh pr view --json number,state,isDraft,url`, 10 s timeout, only
+  when `gh` is on `PATH`) at most every 5 min. At most 2 reads run at once, folders that are no repository give no
+  `changes`, and any `git`/`gh` failure just leaves the field out. The field is optional on the wire both ways.
   **Notifications**: a Claude agent entering needs-you raises "Needs you" / `<name> needs permission: Run: ls`; the 5 s
   silence notification (`AgentWaiting`) is suppressed for a Claude agent the tracker matched to a registry entry and kept
   for Codex, OpenCode and unmatched Claude agents (the `AgentWaiting` event itself still goes to the clients for the

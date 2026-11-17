@@ -136,6 +136,7 @@ fn deps(world: &Arc<Mutex<World>>, clock: &Arc<AtomicI64>) -> DepsParts {
         config_dirs: Box::new(|| vec![PathBuf::from("/cfg")]),
         waiting_text: None,
         git: None,
+        changes: None,
         details: None,
         history: None,
         now: Box::new(move || c.load(Ordering::SeqCst)),
@@ -473,6 +474,50 @@ fn adds_repository_branch_and_commit_and_pushes_when_they_change() {
     assert_eq!(poll.snapshot.sessions[0].commit.as_deref(), Some("abc1234"));
     assert_eq!(poll.snapshot.sessions[0].branch, None);
     assert!(poll.changed);
+}
+
+#[test]
+fn adds_changes_of_the_worktree_from_the_background_cache_and_pushes_when_they_arrive() {
+    use crate::overview::changes::{ChangesCache, ChangesReader, Job, JobSpawner, PrReader};
+    use crate::overview::types::AgentChanges;
+    let queue: Arc<Mutex<Vec<Job>>> = Arc::new(Mutex::new(Vec::new()));
+    let dirs_read = Arc::new(Mutex::new(Vec::<String>::new()));
+    let (q, d) = (queue.clone(), dirs_read.clone());
+    let read: ChangesReader = Arc::new(move |dir| {
+        d.lock().push(dir.display().to_string());
+        Some(AgentChanges {
+            added: 3,
+            files: 1,
+            ..AgentChanges::default()
+        })
+    });
+    let read_pr: PrReader = Arc::new(|_| None);
+    let spawn: JobSpawner = Arc::new(move |job| q.lock().push(job));
+    let mut f = fixture_with(|d| d.changes = Some(ChangesCache::new(read, read_pr, spawn)));
+    let mut a = agent("a1");
+    a.config.worktree_path = Some("/work/wt".into());
+    f.set_agents(vec![a]);
+    let first = f.tracker.refresh();
+    assert_eq!(
+        first.snapshot.sessions[0].changes, None,
+        "never waits for git"
+    );
+    let jobs: Vec<_> = queue.lock().drain(..).collect();
+    assert_eq!(jobs.len(), 1);
+    for job in jobs {
+        job();
+    }
+    assert_eq!(*dirs_read.lock(), vec!["/work/wt".to_string()]);
+    f.advance(1);
+    let second = f.tracker.refresh();
+    assert_eq!(
+        second.snapshot.sessions[0]
+            .changes
+            .as_ref()
+            .map(|c| c.added),
+        Some(3)
+    );
+    assert!(second.changed);
 }
 
 #[test]

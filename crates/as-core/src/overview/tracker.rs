@@ -13,6 +13,7 @@ use std::sync::Arc;
 use chrono::DateTime;
 use parking_lot::Mutex;
 
+use super::changes::ChangesCache;
 use super::claude_registry::{
     ClaudeRegistryReader, MatchableAgent, RegistryEntry, match_registry_entries,
 };
@@ -76,6 +77,8 @@ pub struct TrackerDeps {
     pub config_dirs: Box<dyn Fn() -> Vec<PathBuf> + Send>,
     pub waiting_text: Option<WaitingTextReader>,
     pub git: Option<GitInfoCache>,
+    /// Git change facts per working folder, read in the background.
+    pub changes: Option<ChangesCache>,
     pub details: Option<AgentDetailsReader>,
     pub history: Option<Box<dyn HistorySink>>,
     pub now: Box<dyn Fn() -> i64 + Send>,
@@ -100,6 +103,7 @@ impl TrackerDeps {
             }),
             waiting_text: Some(WaitingTextReader::default()),
             git: Some(GitInfoCache::default()),
+            changes: Some(ChangesCache::default()),
             details: Some(AgentDetailsReader::default()),
             history: Some(history),
             now: Box::new(super::history_store::wall_clock_ms),
@@ -149,6 +153,7 @@ fn session_key(s: &OverviewSession) -> String {
                 s.quiet_for_ms.is_some()
             ),
             (s.pid, s.started_at),
+            &s.changes,
         )
     )
 }
@@ -361,6 +366,17 @@ impl OverviewTracker {
                 .git
                 .as_mut()
                 .and_then(|g| g.get(&agent.project_dir, now));
+            // The folder the agent really works in: its worktree, else its project folder.
+            let work_dir = agent
+                .worktree_path
+                .as_deref()
+                .filter(|p| !p.is_empty())
+                .unwrap_or(&agent.project_dir);
+            let changes = self
+                .deps
+                .changes
+                .as_mut()
+                .and_then(|c| c.get(work_dir, &agent.id, derived.status, now));
             let last_output_at = to_ms(activity.last_output_at);
             sessions.push(OverviewSession {
                 agent_id: agent.id.clone(),
@@ -383,6 +399,7 @@ impl OverviewTracker {
                 pid: agent.pid,
                 started_at: agent.started_at.as_deref().and_then(parse_ms).unwrap_or(0),
                 last_output_at,
+                changes,
             });
         }
         if let Some(reader) = &mut self.deps.waiting_text {
@@ -392,6 +409,14 @@ impl OverviewTracker {
         self.locators.retain(|id, _| alive.contains(id));
         if let Some(git) = &mut self.deps.git {
             git.retain(agents.iter().map(|a| a.project_dir.as_str()));
+        }
+        if let Some(changes) = &mut self.deps.changes {
+            changes.retain(agents.iter().map(|a| {
+                a.worktree_path
+                    .as_deref()
+                    .filter(|p| !p.is_empty())
+                    .unwrap_or(&a.project_dir)
+            }));
         }
 
         let snapshot = OverviewSnapshot {

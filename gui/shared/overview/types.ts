@@ -32,6 +32,29 @@ export interface AgentActivity {
   lastExitCode: number | null
 }
 
+export type PrState = 'open' | 'draft' | 'merged' | 'closed'
+
+export interface PrSummary {
+  number: number
+  state: PrState
+  url: string
+}
+
+/** What an agent changed in its working folder (read by the daemon in the background). */
+export interface AgentChanges {
+  /** Added lines against HEAD (untracked text files count as additions). */
+  added: number
+  removed: number
+  /** Changed files, untracked ones included. */
+  files: number
+  /** Of `files`, the ones git does not track yet. */
+  untracked: number
+  /** Commits not pushed to the upstream; absent without an upstream. */
+  ahead?: number
+  behind?: number
+  pr?: PrSummary
+}
+
 export interface OverviewSession {
   agentId: string
   name: string
@@ -63,6 +86,8 @@ export interface OverviewSession {
   /** Epoch ms, `0` when the agent never started. */
   startedAt: number
   lastOutputAt: number
+  /** Git change facts of the agent's folder; absent for non-repositories, old daemons, and until first read. */
+  changes?: AgentChanges
 }
 
 export interface OverviewCounts {

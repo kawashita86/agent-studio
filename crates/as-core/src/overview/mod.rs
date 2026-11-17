@@ -4,10 +4,11 @@
 //!
 //! Pure logic: [`types`], [`status`], [`diff`], [`buckets`], [`grouping`], [`waits`],
 //! [`waiting_text`], [`details`]. Services: [`claude_registry`] (+ pid matching),
-//! [`process_tree`], [`git_info`], [`transcript_tail`], [`history_store`] (+ [`history_files`],
+//! [`process_tree`], [`git_info`], [`changes`] (git facts and PR state, read in the background), [`transcript_tail`], [`history_store`] (+ [`history_files`],
 //! [`wait_ledger`]) and the [`tracker`] that ties them together.
 
 pub mod buckets;
+pub mod changes;
 pub mod claude_registry;
 pub mod details;
 pub mod diff;

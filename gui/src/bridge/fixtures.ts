@@ -6,7 +6,7 @@ import {
   type AppConfig,
   type FreeTerminalLayout
 } from '@shared/types'
-import type { OverviewCounts, OverviewSession, OverviewSnapshot, OverviewStatus } from '@shared/overview/types'
+import type { AgentChanges, OverviewCounts, OverviewSession, OverviewSnapshot, OverviewStatus } from '@shared/overview/types'
 import type { UsageState } from '@shared/usage/types'
 import type { AppInfo } from './transport'
 
@@ -96,6 +96,20 @@ const OVERVIEW_STATUS: Record<AgentState['status'], OverviewStatus> = {
   starting: 'starting'
 }
 
+/** Git change facts for two mock agents: one with a pull request, one with unpushed work. */
+const MOCK_CHANGES: Record<string, AgentChanges> = {
+  e5f6a7b8: {
+    added: 142,
+    removed: 37,
+    files: 6,
+    untracked: 1,
+    ahead: 2,
+    behind: 0,
+    pr: { number: 31, state: 'open', url: 'https://github.com/you/website/pull/31' }
+  },
+  a1b2c3d4: { added: 18, removed: 4, files: 2, untracked: 0, ahead: 1 }
+}
+
 export function overviewSnapshot(agents: AgentState[]): OverviewSnapshot {
   const at = Date.now()
   const sessions: OverviewSession[] = agents.map((a, i) => {
@@ -119,7 +133,8 @@ export function overviewSnapshot(agents: AgentState[]): OverviewSnapshot {
       stale: false,
       pid: a.pid,
       startedAt: a.startedAt ? Date.parse(a.startedAt) : 0,
-      lastOutputAt: Date.parse(a.lastActivityAt)
+      lastOutputAt: Date.parse(a.lastActivityAt),
+      ...(MOCK_CHANGES[a.id] ? { changes: MOCK_CHANGES[a.id] } : {})
     }
   })
   const count = (s: OverviewStatus): number => sessions.filter((x) => x.status === s).length

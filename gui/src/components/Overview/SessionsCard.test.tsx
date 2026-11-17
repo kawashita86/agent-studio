@@ -38,6 +38,66 @@ function renderCard(sessions: OverviewSession[], props: { onOpen?: () => void; o
   )
 }
 
+describe('changes in the rows', () => {
+  const openExternal = vi.fn().mockResolvedValue(true)
+  beforeEach(() => {
+    window.localStorage.clear()
+    openExternal.mockClear()
+    window.hydra = { ...window.hydra, openExternal }
+  })
+  afterEach(cleanup)
+
+  const changes = { added: 142, removed: 37, files: 6, untracked: 1, ahead: 2 }
+
+  it('shows the diff, unpushed commits and a PR pill, in a Ready for review group', () => {
+    renderCard([
+      s('a', 'idle', {
+        changes: { ...changes, pr: { number: 31, state: 'open', url: 'https://github.com/o/r/pull/31' } }
+      }),
+      s('b', 'working')
+    ])
+    expect(screen.getAllByRole('heading', { level: 4 }).map((h) => h.textContent)).toEqual([
+      'Ready for review1',
+      'Working1'
+    ])
+    const group = screen.getByRole('region', { name: 'Ready for review' })
+    expect(within(group).getByText('+142')).toBeTruthy()
+    expect(within(group).getByText('\u221237')).toBeTruthy()
+    expect(within(group).getByText(/6 files/)).toBeTruthy()
+    expect(within(group).getByTitle('2 commits not pushed').textContent).toBe('\u21912')
+    fireEvent.click(within(group).getByRole('button', { name: 'Open PR #31 open in the browser' }))
+    expect(openExternal).toHaveBeenCalledWith('https://github.com/o/r/pull/31')
+  })
+
+  it('shows nothing when changes are absent or all zero, and singular wording for one', () => {
+    const { container } = renderCard([
+      s('a', 'working'),
+      s('b', 'working', { changes: { added: 0, removed: 0, files: 0, untracked: 0, ahead: 0 } })
+    ])
+    expect(container.querySelector('[data-testid="changes"]')).toBeNull()
+    expect(screen.queryByRole('button', { name: /Open PR/ })).toBeNull()
+    cleanup()
+    renderCard([s('c', 'working', { changes: { added: 1, removed: 0, files: 1, untracked: 0, ahead: 1 } })])
+    expect(screen.getByText(/1 file$/)).toBeTruthy()
+    expect(screen.getByTitle('1 commit not pushed')).toBeTruthy()
+  })
+
+  it('does not open a PR link that is not a web URL', () => {
+    const pr = { number: 2, state: 'draft' as const, url: 'file:///etc/passwd' }
+    renderCard([s('a', 'working', { changes: { ...changes, pr } })])
+    fireEvent.click(screen.getByRole('button', { name: 'Open PR #2 draft in the browser' }))
+    expect(openExternal).not.toHaveBeenCalled()
+  })
+
+  it('shows the diff and the PR pill on board cards', () => {
+    window.localStorage.setItem(LAYOUT_STORAGE_KEY, 'board')
+    const pr = { number: 9, state: 'merged' as const, url: 'https://x/9' }
+    renderCard([s('a', 'idle', { changes: { ...changes, pr } })])
+    expect(screen.getByText('+142')).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Open PR #9 merged in the browser' })).toBeTruthy()
+  })
+})
+
 describe('SessionsCard', () => {
   beforeEach(() => window.localStorage.clear())
   afterEach(cleanup)
