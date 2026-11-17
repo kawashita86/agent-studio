@@ -19,6 +19,8 @@ interface SidebarProps {
   onRenameAgent: (agentId: string, newName: string) => void
   onRemoveAgent: (agentId: string) => void
   onStopAgent: (agentId: string) => void
+  id?: string
+  collapsed?: boolean
   width: number
   onWidthChange: (width: number) => void
   sessionMaxAgeDays: number
@@ -39,6 +41,8 @@ export function Sidebar({
   onRenameAgent,
   onRemoveAgent,
   onStopAgent,
+  id,
+  collapsed = false,
   width,
   onWidthChange,
   sessionMaxAgeDays,
@@ -208,7 +212,12 @@ export function Sidebar({
   }, [selectionMode, numberedAgentMap, onSelectAgent])
 
   return (
-    <aside className={styles.sidebar} style={{ width }} aria-label="Projects and agents">
+    <aside
+      id={id}
+      className={`${styles.sidebar} ${collapsed ? styles.collapsed : ''}`}
+      style={{ width }}
+      aria-hidden={collapsed || undefined}
+      aria-label="Projects and agents">
       <div className={styles.searchWrapper}>
         <SearchBar
           value={searchQuery}
