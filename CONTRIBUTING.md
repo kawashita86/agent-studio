@@ -32,7 +32,10 @@ A fresh home imports every Claude/Codex session on your machine as idle agents; 
 - **Feature branches and pull requests** for everything (`feat/<name>`, `fix/<name>`, `docs/<name>`, `refactor/<name>`); never push to `main` directly.
   (The initial port, phases P0 to P10, was committed straight to `main`; that is over.)
 - **Conventional Commits**: `feat(core): ...`, `fix(gui): ...`, `docs: ...`, `test: ...`, `ci: ...`, `chore: ...`. One logical change per commit.
-- CI (`.github/workflows/ci.yml`, job `check (<os>)`) runs the front-end checks, fmt, clippy and the whole test suite on **Linux, macOS and Windows**. All three must be green. You
+- CI (`.github/workflows/ci.yml`, job `check (<os>)`) runs the front-end checks, fmt, clippy and the whole test suite on **Linux, macOS and Windows**. All three must be green. It runs on
+  pull requests only (plus a weekly run on `main` that refreshes the Rust cache, and pushes to `ci/**` branches to try workflow changes):
+  `main` requires PRs to be up to date, so a merge is exactly what its PR tested. A PR that only bumps versions (`chore/release-*`) takes a
+  fast path (`.github/scripts/ci-scope.sh`). You
   cannot run Windows locally, so read `docs/AGENTLOG.md` ("Test portability pitfalls", "Windows: ConPTY ...") before touching PTY, socket,
   path or process code, and before writing tests that spawn processes or compare paths.
 - Releases: see `docs/releasing.md`.

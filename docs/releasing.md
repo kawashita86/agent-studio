@@ -2,10 +2,14 @@
 
 ## Cutting a release
 
-1. Make sure `main` is green (CI job `check (<os>)`: front end, fmt, clippy `-D warnings`, tests on Linux, macOS and Windows).
+1. Make sure `main` is green: CI (job `check (<os>)`: front end, fmt, clippy `-D warnings`, tests on Linux, macOS and Windows) runs on pull
+   requests, not on the merge (`main` requires PRs to be up to date, so the merge is what the PR tested); the last merged PR being green is
+   enough. To re-check `main` itself: *Actions > CI > Run workflow* on `main`.
 2. Set the version in the root `Cargo.toml` (`[workspace.package]`), in the `version` of the path dependencies
    (`as-core = { version = ... }`, ...), in `crates/as-gui/tauri.conf.json` (`version`) and in `gui/package.json`; run `cargo build` so
-   `Cargo.lock` follows, merge that through a pull request.
+   `Cargo.lock` follows, merge that through a pull request. A PR that only changes `version` lines (and Markdown) takes CI's fast path
+   (`.github/scripts/ci-scope.sh`: `cargo metadata --locked` plus a package-lock check, about a minute) instead of the full build; anything
+   else in it (a dependency change, a code fix) runs the full check.
 3. Tag the merge commit and push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`. The tag must equal the workspace version and the
    `tauri.conf.json` version (the workflow checks it). A tag with a hyphen (`v0.2.0-rc.1`) is published as a prerelease, which the
    in-app update check ignores.
