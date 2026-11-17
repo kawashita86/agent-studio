@@ -10,6 +10,9 @@ interface HeaderProps {
   viewMode: ViewMode
   onSelectViewMode: (mode: ViewMode) => void
   needsYouCount?: number
+  sidebarCollapsed?: boolean
+  sidebarId?: string
+  onToggleSidebar?: () => void
   onOpenNewAgent: () => void
   globalYolo: boolean
   onToggleGlobalYolo: () => void
@@ -31,6 +34,9 @@ export function Header({
   viewMode,
   onSelectViewMode,
   needsYouCount,
+  sidebarCollapsed = false,
+  sidebarId,
+  onToggleSidebar,
   onOpenNewAgent,
   globalYolo: _globalYolo,
   onToggleGlobalYolo: _onToggleGlobalYolo,
@@ -51,6 +57,20 @@ export function Header({
   return (
     <header className={`${styles.header} ${isMac ? styles.macHeader : ''} titlebar-drag`} data-tauri-drag-region>
       <div className={styles.left} data-tauri-drag-region>
+        {onToggleSidebar && (
+          <Tooltip content={`${sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'} (${isMac ? '⌘B' : 'Ctrl+B'})`}>
+            <button
+              type="button"
+              className={`${styles.sidebarToggle} titlebar-no-drag`}
+              onClick={onToggleSidebar}
+              aria-label={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+              aria-expanded={!sidebarCollapsed}
+              aria-controls={sidebarId}
+            >
+              <SidebarIcon collapsed={sidebarCollapsed} />
+            </button>
+          </Tooltip>
+        )}
         <div className={styles.logoMark} data-tauri-drag-region>
           <AgentStudioLogo />
         </div>
@@ -101,6 +121,22 @@ export function Header({
         </Tooltip>
       </div>
     </header>
+  )
+}
+
+function SidebarIcon({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="4" width="18" height="16" rx="3" />
+      {collapsed ? (
+        <line x1="9" y1="4" x2="9" y2="20" opacity=".35" strokeDasharray="2 3" />
+      ) : (
+        <>
+          <line x1="9" y1="4" x2="9" y2="20" />
+          <rect x="3.8" y="4.8" width="4.6" height="14.4" rx="2" fill="currentColor" stroke="none" opacity=".4" />
+        </>
+      )}
+    </svg>
   )
 }
 

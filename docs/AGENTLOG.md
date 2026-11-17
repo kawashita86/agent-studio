@@ -553,3 +553,18 @@ Use one Chat body with an optional editor sibling. Switching between separate sp
   renamed the agent while it had no process; persisted in `workspace.json`, cleared once written). On a resumed spawn it
   adopts the transcript's last `customTitle` instead (`SessionLocator::custom_title`, `read_last_custom_title`; read on a
   blocking thread, never under the manager lock, skipped if the name changed meanwhile). `import_sessions` uses the same title.
+
+## IBus on WebKitGTK injects stale text into the terminal: one-shot compositions and the 229 textarea diff (2026-11-17)
+
+- Seen on Wayland + IBus + Italian layout: typing an accented key (è, é, ò, à, ù) sent the accumulated contents of xterm.js's
+  hidden helper textarea (" è", then "é ò", or garbage) to the PTY. A dev-only event trace showed why: IBus commits those keys as
+  a 229 keydown + `insertFromComposition` + `compositionend` **without a `compositionstart`**, so xterm's `CompositionHelper`
+  has a stale start offset and sends `textarea.value.substring(start)`, i.e. the whole textarea. The textarea fills up because
+  WebKit still inserts keys xterm already sent (Space) into it. The related 229 path (`_handleAnyTextareaChanges`, a
+  `setTimeout(0)` diff of the textarea) can re-send stale text the same way.
+- Do not rely on xterm's textarea diffing. `imeInputGuard.ts` (capture phase on the wrapper): sends the `InputEvent.data` of a
+  one-shot `insertFromComposition` itself and swallows the `compositionend` that follows; blocks non-composition 229 keydowns and
+  sends their `insertText` data; sends DEL for a 229 Backspace; and keeps the textarea empty. Real compositions
+  (`compositionstart`..`compositionend`, CJK) stay with xterm. To debug input again, log keydown/keypress/beforeinput/input/
+  composition* events plus `terminal.textarea.value` and every `onData` through `window.hydra.logEvent` (lands in
+  `<home>/logs/agent-studio-gui.<date>`) in a `tauri dev` run.

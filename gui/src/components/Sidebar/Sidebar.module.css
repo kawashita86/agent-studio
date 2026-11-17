@@ -107,3 +107,8 @@
     min-width: 200px;
   }
 }
+
+/* Hidden but still mounted so search, filters and expanded projects survive. display:none also removes it from the tab order. */
+.collapsed {
+  display: none;
+}

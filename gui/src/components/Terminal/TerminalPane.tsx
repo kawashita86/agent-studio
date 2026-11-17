@@ -8,6 +8,7 @@ import { WebglAddon } from '@xterm/addon-webgl'
 import '@xterm/xterm/css/xterm.css'
 import { useTerminalConfig } from '../../hooks/useTerminalConfig'
 import { installMiddleClickPasteGuard } from './middleClickPasteGuard'
+import { installImeInputGuard, type ImeInputGuard } from './imeInputGuard'
 import { createFitScheduler, hasUsableBox, isUsableGrid, shouldNotify } from './terminalFit'
 
 interface TerminalPaneProps {
@@ -209,8 +210,13 @@ export function TerminalPane({
     window.addEventListener('resize', onWindowChange)
     document.addEventListener('visibilitychange', onVisibilityChange)
 
+    // IME (IBus) keydowns arrive as keyCode 229; the guard sends InputEvent.data instead of
+    // letting xterm diff its helper textarea (which re-sends stale text). See imeInputGuard.ts.
+    let imeGuard: ImeInputGuard | null = null
+
     // Shift+Enter → send newline instead of carriage return
     terminal.attachCustomKeyEventHandler((e) => {
+      if (imeGuard?.blockKeydown(e)) return false
       if (e.type === 'keydown' && e.key === 'Enter' && e.shiftKey) {
         onDataRef.current?.('\n')
         return false // prevent xterm from also sending \r
@@ -298,6 +304,9 @@ export function TerminalPane({
     // Linux middle click: when the program has mouse tracking on (Claude Code),
     // it pastes the selection itself, so drop the browser's paste.
     const disposeMiddleClickPasteGuard = installMiddleClickPasteGuard(wrapper, terminal)
+    if (onDataRef.current) {
+      imeGuard = installImeInputGuard(wrapper, terminal, (data) => onDataRef.current?.(data))
+    }
 
     // ── Native DOM listeners for drag-and-drop ──
     const handleDragEnter = (e: DragEvent) => {
@@ -358,6 +367,7 @@ export function TerminalPane({
       themeObserver.disconnect()
       wrapper.removeEventListener('keydown', handleKeyDown, true)
       disposeMiddleClickPasteGuard()
+      imeGuard?.dispose()
       wrapper.removeEventListener('dragenter', handleDragEnter, true)
       wrapper.removeEventListener('dragleave', handleDragLeave, true)
       wrapper.removeEventListener('dragover', handleDragOver, true)

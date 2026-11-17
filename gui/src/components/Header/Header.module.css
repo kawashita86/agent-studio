@@ -70,7 +70,7 @@
   white-space: nowrap;
 }
 
-.projectAddBtn, .settingsBtn {
+.projectAddBtn, .settingsBtn, .sidebarToggle {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -90,9 +90,13 @@
   margin-left: 8px;
 }
 
-.projectAddBtn:hover, .settingsBtn:hover {
+.projectAddBtn:hover, .settingsBtn:hover, .sidebarToggle:hover {
   color: var(--color-text-primary);
   border-color: var(--color-text-muted);
+}
+
+.sidebarToggle {
+  margin-right: 4px;
 }
 
 .updateBtn {

@@ -49,8 +49,10 @@ interface PersistedWorkspaceUiState {
   expandedTilesByProject: Record<string, string | null>
   sidebarWidth: number | null
   editorOpen: boolean | null
+  sidebarCollapsed: boolean
 }
 
+const SIDEBAR_ID = 'app-sidebar'
 const WORKSPACE_UI_STORAGE_KEY = 'agentStudio.workspace-ui:v1'
 
 function readWorkspaceUiState(): PersistedWorkspaceUiState {
@@ -63,7 +65,8 @@ function readWorkspaceUiState(): PersistedWorkspaceUiState {
         viewMode: null,
         expandedTilesByProject: {},
         sidebarWidth: null,
-        editorOpen: null
+        editorOpen: null,
+        sidebarCollapsed: false
       }
     }
 
@@ -80,7 +83,8 @@ function readWorkspaceUiState(): PersistedWorkspaceUiState {
           ? parsed.expandedTilesByProject
           : {},
       sidebarWidth: typeof parsed.sidebarWidth === 'number' ? parsed.sidebarWidth : null,
-      editorOpen: typeof parsed.editorOpen === 'boolean' ? parsed.editorOpen : null
+      editorOpen: typeof parsed.editorOpen === 'boolean' ? parsed.editorOpen : null,
+      sidebarCollapsed: parsed.sidebarCollapsed === true
     }
   } catch {
     return {
@@ -89,7 +93,8 @@ function readWorkspaceUiState(): PersistedWorkspaceUiState {
       viewMode: null,
       expandedTilesByProject: {},
       sidebarWidth: null,
-      editorOpen: null
+      editorOpen: null,
+      sidebarCollapsed: false
     }
   }
 }
@@ -153,6 +158,7 @@ export default function App() {
   const editorPanel = useEditorPanel(selectedAgentId, selectedAgent?.state.projectDir)
 
   const [sidebarWidth, setSidebarWidth] = useState(persistedUi.sidebarWidth ?? 280)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(persistedUi.sidebarCollapsed)
 
   const [showSettings, setShowSettings] = useState(false)
   const [showNewAgent, setShowNewAgent] = useState(false)
@@ -450,8 +456,17 @@ export default function App() {
           })()
           return true
         }
+        case 'toggle-sidebar':
+          setSidebarCollapsed((prev) => !prev)
+          return true
         case 'focus-sidebar-search':
-          window.dispatchEvent(new CustomEvent(SIDEBAR_SEARCH_FOCUS_EVENT))
+          if (sidebarCollapsed) {
+            // The sidebar is display:none while collapsed; wait for it to render before focusing.
+            setSidebarCollapsed(false)
+            requestAnimationFrame(() => window.dispatchEvent(new CustomEvent(SIDEBAR_SEARCH_FOCUS_EVENT)))
+          } else {
+            window.dispatchEvent(new CustomEvent(SIDEBAR_SEARCH_FOCUS_EVENT))
+          }
           return true
         case 'show-shortcuts':
           setShowShortcuts(true)
@@ -522,6 +537,7 @@ export default function App() {
       selectedAgentId,
       setSelectedAgentId,
       setViewMode,
+      sidebarCollapsed,
       toggleViewMode,
       toggleYolo,
       updateState.supported,
@@ -582,9 +598,10 @@ export default function App() {
       viewMode,
       expandedTilesByProject,
       sidebarWidth,
-      editorOpen: editorPanel.isOpen
+      editorOpen: editorPanel.isOpen,
+      sidebarCollapsed
     })
-  }, [selectedProject, selectedAgentId, viewMode, expandedTilesByProject, sidebarWidth, editorPanel.isOpen])
+  }, [selectedProject, selectedAgentId, viewMode, expandedTilesByProject, sidebarWidth, editorPanel.isOpen, sidebarCollapsed])
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -592,14 +609,27 @@ export default function App() {
       const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform)
       const match = matchKeybindingEvent(e, keybindings, isMac)
       if (!match) return
+      if (match.command === 'toggle-sidebar') return // handled in the capture phase below
       if (!executeCommand(match.command, match.argument)) return
       e.preventDefault()
     }
+    // Toggle Sidebar always applies, so it is taken in the capture phase, before xterm.js sees the keydown: otherwise Ctrl+B
+    // would also reach the agent as ^B (Claude Code's "run in background").
+    const captureHandler = (e: KeyboardEvent) => {
+      const isMac = /Mac|iPod|iPhone|iPad/.test(navigator.platform)
+      const match = matchKeybindingEvent(e, keybindings, isMac)
+      if (match?.command !== 'toggle-sidebar') return
+      e.preventDefault()
+      e.stopPropagation()
+      executeCommand('toggle-sidebar')
+    }
 
+    window.addEventListener('keydown', captureHandler, true)
     window.addEventListener('keydown', handler)
     const toggleEditorListener = () => { executeCommand('toggle-editor') }
     window.addEventListener('agentStudio.toggle-editor', toggleEditorListener)
     return () => {
+      window.removeEventListener('keydown', captureHandler, true)
       window.removeEventListener('keydown', handler)
       window.removeEventListener('agentStudio.toggle-editor', toggleEditorListener)
     }
@@ -714,6 +744,9 @@ export default function App() {
         showUpdateAction={updateState.supported}
         updateReadyToInstall={updateState.downloaded}
         updateAvailable={updateState.available}
+        sidebarCollapsed={sidebarCollapsed}
+        sidebarId={SIDEBAR_ID}
+        onToggleSidebar={() => setSidebarCollapsed((prev) => !prev)}
         selectedProjectName={viewMode === 'grid' ? selectedProjectName : undefined}
         projectDir={headerProjectDir}
         defaultEditor={config.defaultEditor}
@@ -740,6 +773,8 @@ export default function App() {
           onStopAgent={(agentId) => {
             void killAgent(agentId)
           }}
+          id={SIDEBAR_ID}
+          collapsed={sidebarCollapsed}
           width={sidebarWidth}
           onWidthChange={setSidebarWidth}
           sessionMaxAgeDays={config.sessionMaxAgeDays}

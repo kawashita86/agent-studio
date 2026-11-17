@@ -66,8 +66,11 @@ vi.mock('./components/Header/Header', () => ({
     onOpenHeadless: () => void
     onOpenUsage: () => void
     onSelectViewMode: (mode: ViewMode) => void
+    sidebarCollapsed?: boolean
+    onToggleSidebar?: () => void
   }) => (
     <div>
+      <button onClick={props.onToggleSidebar} aria-pressed={props.sidebarCollapsed}>toggle-sidebar</button>
       <button onClick={() => props.onSelectViewMode('overview')}>show-overview</button>
       <button onClick={() => props.onSelectViewMode('chat')}>show-chat</button>
       <button onClick={() => props.onSelectViewMode('grid')}>show-grid</button>
@@ -79,8 +82,8 @@ vi.mock('./components/Header/Header', () => ({
 }))
 
 vi.mock('./components/Sidebar/Sidebar', () => ({
-  Sidebar: (props: { onNewAgent: () => void; onSelectAgent: (id: string) => void }) => (
-    <aside aria-label="Projects and agents">
+  Sidebar: (props: { onNewAgent: () => void; onSelectAgent: (id: string) => void; collapsed?: boolean }) => (
+    <aside aria-label="Projects and agents" data-collapsed={props.collapsed ? 'true' : 'false'}>
       <button onClick={props.onNewAgent}>new-agent</button>
       <button onClick={() => props.onSelectAgent('agent-jump')}>sidebar-open-agent</button>
     </aside>
@@ -285,6 +288,22 @@ function setupViewModeMock() {
   }))
 }
 
+function stubHealthyHydra() {
+  window.hydra = {
+    ...window.hydra,
+    preflight: vi.fn().mockResolvedValue({
+      ok: true,
+      claudePath: '/usr/local/bin/claude',
+      version: '1.0.0',
+      error: null
+    } satisfies PreflightResult),
+    onConfirmQuit: vi.fn().mockReturnValue(() => undefined),
+    confirmQuit: vi.fn().mockResolvedValue(true),
+    onNotification: vi.fn().mockReturnValue(() => undefined),
+    dismissNotification: vi.fn()
+  }
+}
+
 describe('App flow behavior', () => {
   afterEach(cleanup)
 
@@ -323,6 +342,36 @@ describe('App flow behavior', () => {
       getConfigPath: vi.fn().mockResolvedValue('/tmp/config.json'),
       onKeybindingsChange: vi.fn().mockReturnValue(() => undefined)
     }
+  })
+
+  it('toggles the sidebar from the header and with Ctrl+B, persisting the state', async () => {
+    const sidebar = () => screen.getByLabelText('Projects and agents')
+    stubHealthyHydra()
+    render(<App />)
+    expect(sidebar().getAttribute('data-collapsed')).toBe('false')
+
+    fireEvent.click(screen.getByText('toggle-sidebar'))
+    expect(sidebar().getAttribute('data-collapsed')).toBe('true')
+    await waitFor(() => {
+      expect(JSON.parse(window.localStorage.getItem('agentStudio.workspace-ui:v1') ?? '{}').sidebarCollapsed).toBe(true)
+    })
+
+    fireEvent.keyDown(window, { key: 'b', ctrlKey: true })
+    expect(sidebar().getAttribute('data-collapsed')).toBe('false')
+  })
+
+  it('restores a collapsed sidebar from persisted UI state', () => {
+    window.localStorage.setItem('agentStudio.workspace-ui:v1', JSON.stringify({ sidebarCollapsed: true }))
+    stubHealthyHydra()
+    render(<App />)
+    expect(screen.getByLabelText('Projects and agents').getAttribute('data-collapsed')).toBe('true')
+  })
+
+  it('ignores a non-boolean persisted sidebarCollapsed value', () => {
+    window.localStorage.setItem('agentStudio.workspace-ui:v1', JSON.stringify({ sidebarCollapsed: 'yes' }))
+    stubHealthyHydra()
+    render(<App />)
+    expect(screen.getByLabelText('Projects and agents').getAttribute('data-collapsed')).toBe('false')
   })
 
   it('blocks opening new agent when preflight fails', async () => {
