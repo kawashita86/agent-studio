@@ -169,6 +169,7 @@ before the new process writes; `useAgents` drops its copy of the screen, so the 
 | Method | Meaning |
 |--------|---------|
 | `getDaemonStatus()` / `onDaemonStatus(cb)` | `{ connected, error? }`; drives the "Connecting to the daemon..." / "Daemon not reachable" banner (`components/Daemon`) |
+| `answerPermission(agentId, promptId, allow)` | Allow or deny the permission dialog `promptId` (`OverviewSession.permissionPrompt.id`) of a Claude agent: the daemon re-reads the agent's screen and writes the answer key only when that dialog is still showing, else rejects with "The prompt changed; open the agent to answer it". Used by the Overview's Allow / Deny |
 | `previewHydraImport(dir?)` / `applyHydraImport(dir?)` | `PreviewHydraImport` / `ApplyHydraImport` (`hydraImportApi.ts`): what importing Hydra's config and agents would change, then the merge; `dir` overrides Hydra's data folder. Used by Settings > Import from Hydra |
 | `onAgentsChanged(cb)` | the agent list changed elsewhere (CLI/TUI/MCP) or the connection came back: `useAgents` reloads the list |
 | `onAgentRestarted(cb)` | `{ agentId }`: a new process replaced the agent's old one; `useAgents` clears the agent's output (G2b) |

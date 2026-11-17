@@ -73,7 +73,12 @@ Overview                        [5h ▓▓░ 42%] [week ▓▓▓░ 78%] 1.4M 
 - UI: diff column in session rows; "Ready for review" group = idle/finished agents with uncommitted or
   unpushed changes or an open PR.
 
-### Step 4 — Allow / Deny (P7)
+### Step 4 — Allow / Deny (P7) — done for Claude Code only
+Decided scope: Claude Code agents. Codex and OpenCode keep Jump only. Implemented as
+`as-core::overview::permission_prompt` (screen replay with `vt100`), `AgentManager::{permission_prompt,
+answer_permission}`, `OverviewSession.permissionPrompt`, `Request::AnswerPermission`, Allow / Deny in
+`NeedsYouPanel`. Prompt shapes: `docs/AGENTLOG.md` (2026-11-17, Claude permission dialog).
+Original plan:
 - **Spike first (read-only):** detect permission prompts per provider (Claude Code, Codex, OpenCode)
   from the PTY screen, and show which key would be sent without sending it. Document per-version
   prompt shapes in `docs/AGENTLOG.md`.

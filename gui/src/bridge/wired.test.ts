@@ -11,6 +11,7 @@ describe('bridge README', () => {
     const implemented = new Set<string>([...WIRED_METHODS, ...WIRED_CHANNELS])
     // Agent Studio extensions are documented below the table, not in it.
     implemented.delete('getDaemonStatus')
+    implemented.delete('answerPermission')
     implemented.delete('previewHydraImport')
     implemented.delete('applyHydraImport')
     expect([...wired].sort()).toEqual([...implemented].sort())

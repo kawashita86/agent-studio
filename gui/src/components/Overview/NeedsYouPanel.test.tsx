@@ -297,3 +297,90 @@ describe('keyboard triage', () => {
     expect(document.querySelectorAll('kbd')).toHaveLength(5)
   })
 })
+
+describe('NeedsYouPanel permission answers', () => {
+  const prompt = {
+    id: 'p1',
+    question: 'Do you want to proceed?',
+    summary: 'Bash command\nmkdir demo-dir'
+  }
+  let answerPermission: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    answerPermission = vi.fn().mockResolvedValue(undefined)
+    window.hydra = { ...window.hydra, answerPermission } as typeof window.hydra
+  })
+  afterEach(cleanup)
+
+  function renderWith(session: OverviewSession) {
+    return render(<NeedsYouPanel sessions={[session]} now={NOW} showProvider={false} onJumpToAgent={vi.fn()} />)
+  }
+
+  it('shows Allow, Deny and the command only when the session has a prompt', () => {
+    const { unmount } = renderWith(waiting('a', 1, { waitingReason: 'permission' }))
+    expect(screen.queryByRole('button', { name: /^Allow/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^Deny/ })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Jump to agent-a' })).toBeTruthy()
+    unmount()
+
+    renderWith(waiting('a', 1, { waitingReason: 'permission', permissionPrompt: prompt }))
+    expect(screen.getByRole('button', { name: 'Allow agent-a' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Deny agent-a' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Jump to agent-a' })).toBeTruthy()
+    expect(screen.getByText(/mkdir demo-dir/).tagName).toBe('PRE')
+  })
+
+  it('answers with the prompt id', async () => {
+    renderWith(waiting('a', 1, { permissionPrompt: prompt }))
+    fireEvent.click(screen.getByRole('button', { name: 'Allow agent-a' }))
+    expect(answerPermission).toHaveBeenCalledWith('a', 'p1', true)
+    await screen.findByText('Answer sent')
+    cleanup()
+    answerPermission.mockClear()
+    renderWith(waiting('a', 1, { permissionPrompt: prompt }))
+    fireEvent.click(screen.getByRole('button', { name: 'Deny agent-a' }))
+    expect(answerPermission).toHaveBeenCalledWith('a', 'p1', false)
+  })
+
+  it('disables both buttons while the call is pending and after it was sent', async () => {
+    let resolve: () => void = () => undefined
+    answerPermission.mockReturnValue(new Promise<void>((r) => (resolve = r)))
+    renderWith(waiting('a', 1, { permissionPrompt: prompt }))
+    fireEvent.click(screen.getByRole('button', { name: 'Allow agent-a' }))
+    expect((screen.getByRole('button', { name: 'Allow agent-a' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: 'Deny agent-a' }) as HTMLButtonElement).disabled).toBe(true)
+    // Jump stays available.
+    expect((screen.getByRole('button', { name: 'Jump to agent-a' }) as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Deny agent-a' }))
+    expect(answerPermission).toHaveBeenCalledTimes(1)
+    resolve()
+    await screen.findByText('Answer sent')
+    expect((screen.getByRole('button', { name: 'Allow agent-a' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('shows the daemon error inline and re-enables the buttons', async () => {
+    answerPermission.mockRejectedValue(new Error('The prompt changed; open the agent to answer it'))
+    renderWith(waiting('a', 1, { permissionPrompt: prompt }))
+    fireEvent.click(screen.getByRole('button', { name: 'Allow agent-a' }))
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe('The prompt changed; open the agent to answer it')
+    expect((screen.getByRole('button', { name: 'Allow agent-a' }) as HTMLButtonElement).disabled).toBe(false)
+    expect((screen.getByRole('button', { name: 'Jump to agent-a' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+
+  it('starts fresh when the dialog changes', async () => {
+    const { rerender } = renderWith(waiting('a', 1, { permissionPrompt: prompt }))
+    fireEvent.click(screen.getByRole('button', { name: 'Allow agent-a' }))
+    await screen.findByText('Answer sent')
+    rerender(
+      <NeedsYouPanel
+        sessions={[waiting('a', 1, { permissionPrompt: { ...prompt, id: 'p2' } })]}
+        now={NOW}
+        showProvider={false}
+        onJumpToAgent={vi.fn()}
+      />
+    )
+    expect(screen.queryByText('Answer sent')).toBeNull()
+    expect((screen.getByRole('button', { name: 'Allow agent-a' }) as HTMLButtonElement).disabled).toBe(false)
+  })
+})

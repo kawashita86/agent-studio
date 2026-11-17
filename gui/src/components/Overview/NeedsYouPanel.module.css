@@ -178,6 +178,71 @@
   background: var(--color-action-hover);
 }
 
+/* Allow / Deny of a permission dialog the daemon found on the agent's screen, next to Jump. */
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+
+.allow,
+.deny {
+  border-radius: var(--radius-md);
+  padding: 4px var(--space-3);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  background: transparent;
+  border: 1px solid var(--tone-action);
+  color: var(--tone-action);
+}
+
+.allow {
+  --tone-action: var(--color-status-running);
+}
+
+.deny {
+  --tone-action: var(--color-status-error);
+}
+
+.allow:hover:not(:disabled),
+.deny:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--tone-action) 14%, transparent);
+}
+
+.allow:disabled,
+.deny:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.command {
+  margin: 6px 0 0;
+  padding: var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-input-bg);
+  color: var(--color-text-secondary);
+  font-family: var(--font-mono, monospace);
+  font-size: var(--font-size-xs);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 7.5em;
+  overflow: auto;
+}
+
+.answerError {
+  margin-top: 4px;
+  font-size: var(--font-size-xs);
+  color: var(--color-status-error);
+}
+
+.answerSent {
+  margin-top: 4px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
 /* ── All clear: one line ──────────────────────────────────────────────── */
 
 .clear {

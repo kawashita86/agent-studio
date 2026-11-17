@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicI64, AtomicUsize, Ordering};
 
 use super::*;
 use crate::overview::git_info::GitInfo;
+use crate::overview::permission_prompt::PermissionPrompt;
 use crate::overview::status::STALE_AFTER_MS;
 use crate::overview::types::{
     ClaudeRegistryStatusFields, EventKind, LastMessage, OverviewStatus as S, WaitingReason,
@@ -14,6 +15,7 @@ struct World {
     activity: HashMap<String, AgentActivity>,
     entries: Vec<RegistryEntry>,
     table: ProcessTable,
+    prompts: HashMap<String, PermissionPrompt>,
 }
 
 #[derive(Clone)]
@@ -24,6 +26,9 @@ impl OverviewAgentSource for FakeAgents {
     }
     fn activity(&self, id: &str) -> Option<AgentActivity> {
         self.0.lock().activity.get(id).copied()
+    }
+    fn permission_prompt(&self, id: &str) -> Option<PermissionPrompt> {
+        self.0.lock().prompts.get(id).cloned()
     }
 }
 
@@ -195,6 +200,47 @@ fn a_waiting_claude_registry_entry_is_needs_you_with_its_reason() {
     assert_eq!(snap.counts.needs_you, 1);
     assert_eq!(*f.registry_dirs.lock(), [vec![PathBuf::from("/cfg")]]);
     assert!(f.tracker.has_registry_match("a1"));
+}
+
+fn prompt() -> PermissionPrompt {
+    PermissionPrompt {
+        question: "Do you want to proceed?".into(),
+        summary: Some("Bash command\nmkdir x".into()),
+        options: vec![(1, "Yes".into()), (2, "No".into())],
+        allow_key: 1,
+        id: "p1".into(),
+    }
+}
+
+#[test]
+fn the_permission_prompt_is_only_on_claude_agents_waiting_for_a_permission() {
+    let mut f = fixture();
+    f.set_agents(vec![claude("a1", Some("s1")), agent("a2")]);
+    f.output("a1", f.now(), None);
+    f.output("a2", f.now(), None);
+    f.world.lock().prompts.insert("a1".into(), prompt());
+    f.world.lock().prompts.insert("a2".into(), prompt());
+    // Working: no prompt even if the screen shows one.
+    f.entries(vec![entry(7, "s1", "busy", None)]);
+    let snap = f.tracker.refresh().snapshot;
+    assert!(snap.sessions.iter().all(|s| s.permission_prompt.is_none()));
+    // Waiting for a permission: Claude only.
+    f.entries(vec![entry(7, "s1", "waiting", Some("permission prompt"))]);
+    let polled = f.tracker.refresh();
+    assert!(polled.changed);
+    let a1 = &polled.snapshot.sessions[0];
+    let info = a1.permission_prompt.as_ref().expect("prompt");
+    assert_eq!(info.id, "p1");
+    assert_eq!(info.question, "Do you want to proceed?");
+    assert_eq!(info.summary.as_deref(), Some("Bash command\nmkdir x"));
+    assert!(polled.snapshot.sessions[1].permission_prompt.is_none());
+    // Another dialog: pushed.
+    f.world.lock().prompts.get_mut("a1").unwrap().id = "p2".into();
+    assert!(f.tracker.refresh().changed);
+    // Waiting for something else: none.
+    f.entries(vec![entry(7, "s1", "waiting", Some("input"))]);
+    let snap = f.tracker.refresh().snapshot;
+    assert!(snap.sessions[0].permission_prompt.is_none());
 }
 
 fn bash_line(cmd: &str) -> String {

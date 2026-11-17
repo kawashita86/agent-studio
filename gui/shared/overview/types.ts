@@ -55,6 +55,16 @@ export interface AgentChanges {
   pr?: PrSummary
 }
 
+/** A permission dialog of a Claude agent the Overview can answer (Allow / Deny). */
+export interface PermissionPromptInfo {
+  /** Identifies this dialog; sent back with the answer so a dialog that changed meanwhile is not answered. */
+  id: string
+  /** "Do you want to proceed?" */
+  question: string
+  /** The tool and command lines of the dialog (at most three), joined with newlines. */
+  summary?: string
+}
+
 export interface OverviewSession {
   agentId: string
   name: string
@@ -88,6 +98,8 @@ export interface OverviewSession {
   lastOutputAt: number
   /** Git change facts of the agent's folder; absent for non-repositories, old daemons, and until first read. */
   changes?: AgentChanges
+  /** The permission dialog on a waiting Claude agent's screen, when the daemon found one; absent means use Jump. */
+  permissionPrompt?: PermissionPromptInfo
 }
 
 export interface OverviewCounts {

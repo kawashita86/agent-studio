@@ -568,3 +568,21 @@ Use one Chat body with an optional editor sibling. Switching between separate sp
   (`compositionstart`..`compositionend`, CJK) stay with xterm. To debug input again, log keydown/keypress/beforeinput/input/
   composition* events plus `terminal.textarea.value` and every `onData` through `window.hydra.logEvent` (lands in
   `<home>/logs/agent-studio-gui.<date>`) in a `tauri dev` run.
+
+## Claude Code permission dialog: shape, keys, and what the Overview answers (2026-11-17)
+
+- Claude Code 2.1.326 draws the dialog on the main screen (not the alternate screen), ANSI stripped:
+  `Bash command` / description / dashed rule / the command / dashed rule / optional notes / `Do you want to proceed?` /
+  `❯ 1. Yes` / `  2. No` / `Esc to cancel · Tab to amend`, under a solid `─` rule. Other dialogs use other questions
+  ("Do you want to make this edit to X?", "Do you want to create X?") and may add a middle `2. Yes, and don't ask again for ...`
+  with `3. No`. The folder-trust dialog is also numbered but says "Yes, I trust this folder": never treat it as a permission prompt.
+- Keys (verified in a real PTY): writing `1` selects "1. Yes" and allows; Esc cancels and denies. The Overview writes the digit of
+  the option labelled exactly `Yes`, never a guessed number, and only after re-reading the screen.
+- **Replay the screen, do not grep the buffer.** Claude repaints with `ESC[H` plus relative cursor moves, and the 2 MB byte buffer
+  still contains answered dialogs. Replay the tail (256 KB) into `vt100` at the agent's PTY size and inspect the visible rows only;
+  a dialog that was answered or scrolled away is then gone. Cutting the tail too short breaks relative paints, so do not shrink it.
+- Detection needs question + at least two options numbered from 1 + an `Esc to cancel` footer + a plain `Yes`; anything else gives
+  no buttons (Jump only). Real captures are the fixtures in `crates/as-core/src/overview/permission_prompt/fixtures/`.
+- Prompts can be rare: user allow rules or auto mode skip them. To force one for testing, start Claude with
+  `--settings '{"permissions":{"ask":["Bash(mkdir:*)"]}}'` (an `ask` rule overrides auto mode for that command).
+- Codex and OpenCode are not covered (Jump only).

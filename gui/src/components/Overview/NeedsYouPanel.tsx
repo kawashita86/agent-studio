@@ -48,6 +48,59 @@ export function reasonTone(reason: WaitingReason | undefined): ReasonTone {
   return reason === 'permission' || reason === 'question' ? reason : 'other'
 }
 
+/** How long Allow / Deny stay disabled after an answer was sent, in case the same dialog is still up. */
+export const ANSWER_LOCK_MS = 5000
+
+interface AnswerState {
+  /** The dialog this state is about; a different dialog starts fresh. */
+  promptId: string
+  pending: boolean
+  sent: boolean
+  error: string | null
+}
+
+/** Allow / Deny of the permission dialog of one session. Disabled while the call runs and shortly after it succeeded. */
+function useAnswer(session: OverviewSession) {
+  const prompt = session.permissionPrompt
+  const [state, setState] = useState<AnswerState | null>(null)
+  const unlock = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(
+    () => () => {
+      if (unlock.current) clearTimeout(unlock.current)
+    },
+    []
+  )
+  const current = prompt && state?.promptId === prompt.id ? state : null
+
+  const answer = useCallback(
+    (allow: boolean) => {
+      if (!prompt) return
+      const promptId = prompt.id
+      setState({ promptId, pending: true, sent: false, error: null })
+      const call = window.hydra?.answerPermission
+      if (typeof call !== 'function') {
+        setState({ promptId, pending: false, sent: false, error: 'Answering is not available. Jump to the agent.' })
+        return
+      }
+      call(session.agentId, promptId, allow).then(
+        () => {
+          setState({ promptId, pending: false, sent: true, error: null })
+          if (unlock.current) clearTimeout(unlock.current)
+          unlock.current = setTimeout(() => {
+            setState((s) => (s?.promptId === promptId ? null : s))
+          }, ANSWER_LOCK_MS)
+        },
+        (err: unknown) => {
+          const message = err instanceof Error ? err.message : String(err)
+          setState({ promptId, pending: false, sent: false, error: message || 'Could not answer. Jump to the agent.' })
+        }
+      )
+    },
+    [prompt, session.agentId]
+  )
+  return { prompt, answer, busy: !!current && (current.pending || current.sent), error: current?.error ?? null, sent: !!current?.sent }
+}
+
 function Item({
   session,
   now,
@@ -79,6 +132,7 @@ function Item({
     .filter(Boolean)
     .join(' · ')
 
+  const { prompt, answer, busy, error, sent } = useAnswer(session)
   const tone = reasonTone(session.waitingReason)
   const waitedMs = now - session.statusSince
   const level = waitLevel(waitedMs)
@@ -123,18 +177,57 @@ function Item({
             {session.waitingText}
           </div>
         )}
+        {prompt?.summary && (
+          <pre className={styles.command} aria-label={`${prompt.question} Details`}>
+            {prompt.summary}
+          </pre>
+        )}
+        {error && (
+          <div className={styles.answerError} role="alert">
+            {error}
+          </div>
+        )}
+        {sent && (
+          <div className={styles.answerSent} role="status">
+            Answer sent
+          </div>
+        )}
       </div>
       <span className={styles.timer} aria-label="Waiting for">
         {formatDuration(waitedMs)}
       </span>
-      <button
-        type="button"
-        className={styles.jump}
-        onClick={() => onJumpToAgent(session.agentId)}
-        aria-label={`Jump to ${session.name}`}
-      >
-        Jump
-      </button>
+      <div className={styles.actions}>
+        {prompt && (
+          <>
+            <button
+              type="button"
+              className={styles.allow}
+              disabled={busy}
+              onClick={() => answer(true)}
+              aria-label={`Allow ${session.name}`}
+            >
+              Allow
+            </button>
+            <button
+              type="button"
+              className={styles.deny}
+              disabled={busy}
+              onClick={() => answer(false)}
+              aria-label={`Deny ${session.name}`}
+            >
+              Deny
+            </button>
+          </>
+        )}
+        <button
+          type="button"
+          className={styles.jump}
+          onClick={() => onJumpToAgent(session.agentId)}
+          aria-label={`Jump to ${session.name}`}
+        >
+          Jump
+        </button>
+      </div>
     </li>
   )
 }

@@ -36,7 +36,8 @@ The daemon is the same binary as the app (`agent-studio daemon --home <dir>`, hi
     `ListSessions(ListSessionsOptions)`, `HideSession { session_id, hidden }`, `ListClaudeProfiles`,
     `SetProjectProfile { project_dir, config_dir }`, `ListProviderModels { provider }` (P4, see *Sessions* below),
     `GetOverview`, `GetOverviewHistory { since_ms }`, `GetOverviewWaits`, `GetOverviewEvents { since_ms, limit }`,
-    `GetAgentDetails { agent_id }` (P6, see *Overview* below),
+    `GetAgentDetails { agent_id }` (P6, see *Overview* below), `AnswerPermission { agent_id, prompt_id, allow }` (Overview
+    Allow / Deny, see *Overview* below),
     `GetUsageState`, `GetUsageSummary { period, project_key }`, `GetUsageReport { provider, days }` (7-90), `RefreshUsage`,
     `UsageVisible(bool)` (P7, see *Usage* below), `GetUpdateState`, `CheckForUpdates` (P10, see *Updates* below),
     `GetMcpStatus`, `StartHeadlessRun`, `ListHeadlessRuns`, `GetHeadlessRun`, `CancelHeadlessRun`, `GetHeadlessRunLog` (P8, see
@@ -86,6 +87,16 @@ The daemon is the same binary as the app (`agent-studio daemon --home <dir>`, hi
   + `git diff --numstat` through `GitRunner`; the PR (`gh pr view --json number,state,isDraft,url`, 10 s timeout, only
   when `gh` is on `PATH`) at most every 5 min. At most 2 reads run at once, folders that are no repository give no
   `changes`, and any `git`/`gh` failure just leaves the field out. The field is optional on the wire both ways.
+  **Allow / Deny (`overview::permission_prompt`)**: a Claude agent that is needs-you with reason `permission` may carry
+  `permissionPrompt { id, question, summary? }`. The daemon replays the last 256 KB of the agent's raw output into a `vt100`
+  screen of the agent's PTY size (only for Claude agents with a process; cached per agent on bytes-ever-pushed + size) and
+  looks at the **visible rows only** for `Do you want to ...?`, numbered options (`1. Yes`, `2. No`, cursor glyph optional)
+  and an `Esc to cancel` footer, with a plain `Yes` option. `id` is a hash of question, summary and options.
+  `AnswerPermission` re-renders and re-detects; with no dialog, or another id, it fails with "The prompt changed; open the
+  agent to answer it" and writes nothing; otherwise it writes the digit of the `Yes` option (allow) or Esc (deny) through
+  `send_raw_input`, the path user keystrokes take, and logs agent id, allow/deny and prompt id at info (never the command).
+  Not exposed through MCP. Limits: heuristic on an undocumented UI; Codex/OpenCode are not detected; a PTY resized
+  mid-dialog can render differently from the user's terminal.
   **Notifications**: a Claude agent entering needs-you raises "Needs you" / `<name> needs permission: Run: ls`; the 5 s
   silence notification (`AgentWaiting`) is suppressed for a Claude agent the tracker matched to a registry entry and kept
   for Codex, OpenCode and unmatched Claude agents (the `AgentWaiting` event itself still goes to the clients for the

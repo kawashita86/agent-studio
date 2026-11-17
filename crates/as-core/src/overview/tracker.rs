@@ -20,6 +20,7 @@ use super::claude_registry::{
 use super::diff::{diff_snapshots, point_from_sessions, resumed_event};
 use super::git_info::GitInfoCache;
 use super::history_store::HistoryStore;
+use super::permission_prompt::PermissionPrompt;
 use super::process_tree::{ProcessTable, ProcessTableReader, descendant_pids};
 use super::status::{compute_counts, derive_status, is_ended, is_stale, quiet_for_ms, to_ms};
 use super::transcript_tail::{
@@ -27,7 +28,7 @@ use super::transcript_tail::{
 };
 use super::types::{
     AgentDetails, HistoryAgent, HistoryPoint, HistoryResponse, OverviewEvent, OverviewSession,
-    OverviewSnapshot, OverviewStatus,
+    OverviewSnapshot, OverviewStatus, PermissionPromptInfo, WaitingReason,
 };
 use crate::agents::{AgentActivity, AgentManager};
 use crate::types::{AgentState, ProviderId};
@@ -36,6 +37,10 @@ use crate::types::{AgentState, ProviderId};
 pub trait OverviewAgentSource: Send {
     fn list(&self) -> Vec<AgentState>;
     fn activity(&self, agent_id: &str) -> Option<AgentActivity>;
+    /// The permission dialog on the screen of a Claude agent, if any.
+    fn permission_prompt(&self, _agent_id: &str) -> Option<PermissionPrompt> {
+        None
+    }
 }
 
 impl OverviewAgentSource for AgentManager {
@@ -44,6 +49,9 @@ impl OverviewAgentSource for AgentManager {
     }
     fn activity(&self, agent_id: &str) -> Option<AgentActivity> {
         self.get_activity(agent_id)
+    }
+    fn permission_prompt(&self, agent_id: &str) -> Option<PermissionPrompt> {
+        AgentManager::permission_prompt(self, agent_id)
     }
 }
 
@@ -154,6 +162,7 @@ fn session_key(s: &OverviewSession) -> String {
             ),
             (s.pid, s.started_at),
             &s.changes,
+            s.permission_prompt.as_ref().map(|p| &p.id),
         )
     )
 }
@@ -377,6 +386,16 @@ impl OverviewTracker {
                 .changes
                 .as_mut()
                 .and_then(|c| c.get(work_dir, &agent.id, derived.status, now));
+            let permission_prompt = (derived.status == OverviewStatus::NeedsYou
+                && derived.waiting_reason == Some(WaitingReason::Permission)
+                && agent.provider == ProviderId::Claude)
+                .then(|| self.deps.agents.permission_prompt(&agent.id))
+                .flatten()
+                .map(|p| PermissionPromptInfo {
+                    id: p.id,
+                    question: p.question,
+                    summary: p.summary,
+                });
             let last_output_at = to_ms(activity.last_output_at);
             sessions.push(OverviewSession {
                 agent_id: agent.id.clone(),
@@ -400,6 +419,7 @@ impl OverviewTracker {
                 started_at: agent.started_at.as_deref().and_then(parse_ms).unwrap_or(0),
                 last_output_at,
                 changes,
+                permission_prompt,
             });
         }
         if let Some(reader) = &mut self.deps.waiting_text {

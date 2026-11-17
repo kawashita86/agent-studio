@@ -16,6 +16,7 @@ pub mod git_info;
 pub mod grouping;
 pub mod history_files;
 pub mod history_store;
+pub mod permission_prompt;
 pub mod process_tree;
 pub mod status;
 pub mod tracker;
